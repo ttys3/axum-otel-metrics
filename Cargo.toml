@@ -11,7 +11,7 @@ axum-core = { git = "https://github.com/tokio-rs/axum.git", branch = "main" }
 axum-extra = { git = "https://github.com/tokio-rs/axum.git", branch = "main" }
 axum-macros = { git = "https://github.com/tokio-rs/axum.git", branch = "main" }
 
-tokio = { version = "1.21.1", features = ["full", "tracing"] }
+tokio = { version = "1.21.2", features = ["full", "tracing"] }
 
 opentelemetry = { version = "0.18.0", features = ["metrics", "rt-tokio"] }
 opentelemetry-otlp = { version = "0.11.0",  features = ["trace"] }
@@ -19,3 +19,8 @@ opentelemetry-prometheus = { version = "0.11.0", features = ["prometheus-encodin
 tracing-opentelemetry = "0.18.0"
 
 prometheus = "0.13.2"
+tracing = "0.1.37"
+tower = "0.4.13"
+futures-util = "0.3.24"
+pin-project-lite = "0.2.9"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
