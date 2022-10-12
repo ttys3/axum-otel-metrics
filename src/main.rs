@@ -1,17 +1,17 @@
 mod middleware;
 
-use axum::{response::Html, routing::get, Router, extract::State};
+use axum::{extract::State, response::Html, routing::get, Router};
 use std::net::SocketAddr;
 use std::time::Instant;
 
+use crate::middleware::metrics::{PromMetrics, PromMetricsLayer};
+use axum::middleware::Next;
 use axum::{extract::MatchedPath, http::Request, response::IntoResponse};
-use axum::middleware::{Next};
-use opentelemetry::{Context, global};
 use opentelemetry::metrics::{Counter, Histogram};
 use opentelemetry::sdk::export::metrics::aggregation;
 use opentelemetry::sdk::metrics::{controllers, processors, selectors};
+use opentelemetry::{global, Context};
 use tower::Layer;
-use crate::middleware::metrics::{PromMetrics, PromMetricsLayer};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[derive(Clone)]

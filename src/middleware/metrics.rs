@@ -1,42 +1,41 @@
 #![feature(generic_associated_types)]
 #![feature(type_alias_impl_trait)]
 
-use axum::{extract::MatchedPath, http::Request, response::IntoResponse, routing::get, Router, http};
-use axum::middleware::{FromFnLayer, Next};
-use std::{fmt, time::{Instant}};
-use std::convert::Infallible;
-use std::future::{Future, ready};
-use std::pin::Pin;
-use std::sync::Arc;
-use std::task::{Context, Poll};
-use std::task::Poll::Ready;
 use axum::extract::State;
 use axum::http::Response;
+use axum::middleware::{FromFnLayer, Next};
 use axum::routing::Route;
+use axum::{
+    extract::MatchedPath, http, http::Request, response::IntoResponse, routing::get, Router,
+};
 use axum_core::body::BoxBody;
 use axum_core::Error;
+use std::convert::Infallible;
+use std::future::{ready, Future};
+use std::pin::Pin;
+use std::sync::Arc;
+use std::task::Poll::Ready;
+use std::task::{Context, Poll};
+use std::{fmt, time::Instant};
 
 use opentelemetry_prometheus::PrometheusExporter;
 
 use prometheus::{Encoder, TextEncoder};
 
-use opentelemetry::{
-    KeyValue,Key,Value,
-};
 use axum_macros::debug_handler;
+use opentelemetry::{Key, KeyValue, Value};
 
-use opentelemetry::{Context as OtelContext, global};
 use opentelemetry::metrics::{Counter, Histogram};
 use opentelemetry::sdk::export::metrics::aggregation;
 use opentelemetry::sdk::metrics::{controllers, processors, selectors};
+use opentelemetry::{global, Context as OtelContext};
 
-use tower::{Layer, Service};
 use tower::layer::{layer_fn, LayerFn};
+use tower::{Layer, Service};
 
 use futures_util::future::BoxFuture;
 use futures_util::ready;
 use pin_project_lite::pin_project;
-
 
 #[derive(Clone)]
 pub struct Metric {
@@ -65,7 +64,6 @@ pub struct PromMetricsLayer {
 }
 
 impl PromMetricsLayer {
-
     pub fn new() -> Self {
         Self {
             state: Arc::new(Self::new_state()),
@@ -73,39 +71,41 @@ impl PromMetricsLayer {
     }
 
     pub fn new_state() -> MetricState {
-
         let meter = global::meter("my-app");
 
         // init global meter provider and prometheus exporter
         let controller = controllers::basic(
             processors::factory(
-                selectors::simple::histogram([0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0]),
+                selectors::simple::histogram([
+                    0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0,
+                ]),
                 aggregation::cumulative_temporality_selector(),
             )
-                .with_memory(true),
+            .with_memory(true),
         )
-            .build();
-        let exporter = opentelemetry_prometheus::exporter(controller).
-            init();
+        .build();
+        let exporter = opentelemetry_prometheus::exporter(controller).init();
 
         let app_state = MetricState {
             exporter,
             metric: Metric {
                 cx: Default::default(),
-                http_counter: meter.u64_counter("http.counter")
+                http_counter: meter
+                    .u64_counter("http.counter")
                     .with_description("Counts http request")
                     .init(),
-                http_req_histogram:  meter.f64_histogram("http.histogram")
+                http_req_histogram: meter
+                    .f64_histogram("http.histogram")
                     .with_description("Counts http request latency")
-                    .init()
-            } };
+                    .init(),
+            },
+        };
 
         app_state
     }
 
     pub fn routes(&self) -> Router<Arc<MetricState>> {
-        Router::with_state(self.state.clone())
-            .route("/metrics", get(exporter_handler))
+        Router::with_state(self.state.clone()).route("/metrics", get(exporter_handler))
     }
 }
 
@@ -115,7 +115,7 @@ impl<S> Layer<S> for PromMetricsLayer {
     fn layer(&self, service: S) -> Self::Service {
         PromMetrics {
             state: self.state.clone(),
-            service
+            service,
         }
     }
 }
@@ -137,8 +137,8 @@ pin_project! {
 }
 
 impl<S, R, ResBody> Service<Request<R>> for PromMetrics<S>
-    where
-        S: Service<Request<R>, Response = Response<ResBody>>,
+where
+    S: Service<Request<R>, Response = Response<ResBody>>,
 {
     type Response = Response<ResBody>;
     type Error = S::Error;
@@ -164,14 +164,14 @@ impl<S, R, ResBody> Service<Request<R>> for PromMetrics<S>
             start,
             method,
             path,
-            state: self.state.clone()
+            state: self.state.clone(),
         }
     }
 }
 
 impl<F, B, E> Future for ResponseFuture<F>
-    where
-        F: Future<Output = Result<Response<B>, E>>,
+where
+    F: Future<Output = Result<Response<B>, E>>,
 {
     type Output = Result<Response<B>, E>;
 
@@ -187,29 +187,45 @@ impl<F, B, E> Future for ResponseFuture<F>
         let status = response.status().as_u16().to_string();
 
         let labels = [
-            KeyValue{key: Key::from("method"), value: Value::from(this.method.clone()) },
+            KeyValue {
+                key: Key::from("method"),
+                value: Value::from(this.method.clone()),
+            },
             KeyValue::new("path", this.path.clone()),
             KeyValue::new("status", status.clone()),
         ];
 
-        this.state.metric.http_counter.add(& this.state.metric.cx, 1, &labels);
+        this.state
+            .metric
+            .http_counter
+            .add(&this.state.metric.cx, 1, &labels);
 
-        this.state.metric.http_req_histogram.record(&this.state.metric.cx, latency, &labels);
+        this.state
+            .metric
+            .http_req_histogram
+            .record(&this.state.metric.cx, latency, &labels);
 
-        tracing::info!("method={} latency={} status={} labels={:?}", &this.method, &latency, &status, &labels);
+        tracing::info!(
+            "method={} latency={} status={} labels={:?}",
+            &this.method,
+            &latency,
+            &status,
+            &labels
+        );
         println!("ResponseFuture::poll");
 
         Poll::Ready(Ok(response))
     }
 }
 
-
 #[debug_handler]
 pub async fn exporter_handler(state: State<Arc<MetricState>>) -> impl IntoResponse {
     println!("metrics api");
     let mut buffer = Vec::new();
     let encoder = TextEncoder::new();
-    encoder.encode(&state.exporter.registry().gather(), &mut buffer).unwrap();
+    encoder
+        .encode(&state.exporter.registry().gather(), &mut buffer)
+        .unwrap();
     let metrics = String::from_utf8(buffer).unwrap();
     metrics
 }
