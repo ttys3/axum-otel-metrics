@@ -1,22 +1,13 @@
-#![feature(generic_associated_types)]
-#![feature(type_alias_impl_trait)]
-
 use axum::extract::State;
 use axum::http::Response;
-use axum::middleware::{FromFnLayer, Next};
-use axum::routing::Route;
-use axum::{
-    extract::MatchedPath, http, http::Request, response::IntoResponse, routing::get, Router,
-};
-use axum_core::body::BoxBody;
-use axum_core::Error;
-use std::convert::Infallible;
-use std::future::{ready, Future};
+use axum::{extract::MatchedPath, http::Request, response::IntoResponse, routing::get, Router};
+
+use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::Poll::Ready;
 use std::task::{Context, Poll};
-use std::{fmt, time::Instant};
+use std::time::Instant;
 
 use opentelemetry_prometheus::PrometheusExporter;
 
@@ -30,10 +21,8 @@ use opentelemetry::sdk::export::metrics::aggregation;
 use opentelemetry::sdk::metrics::{controllers, processors, selectors};
 use opentelemetry::{global, Context as OtelContext};
 
-use tower::layer::{layer_fn, LayerFn};
 use tower::{Layer, Service};
 
-use futures_util::future::BoxFuture;
 use futures_util::ready;
 use pin_project_lite::pin_project;
 
