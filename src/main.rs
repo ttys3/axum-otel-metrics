@@ -5,6 +5,7 @@ mod middleware;
 
 use axum::{response::Html, routing::get, Router};
 use std::net::SocketAddr;
+use std::time;
 
 use crate::middleware::metrics::PromMetricsLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
@@ -47,5 +48,6 @@ async fn main() {
 }
 
 async fn handler() -> Html<&'static str> {
+    std::thread::sleep(time::Duration::from_millis(800));
     Html("<h1>Hello, World!</h1>")
 }

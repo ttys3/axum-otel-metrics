@@ -203,6 +203,14 @@ where
         );
         println!("ResponseFuture::poll");
 
+        let mut buffer = Vec::new();
+        let encoder = TextEncoder::new();
+        encoder
+            .encode(&this.state.exporter.registry().gather(), &mut buffer)
+            .unwrap();
+        let metrics = String::from_utf8(buffer).unwrap();
+        tracing::info!("metrics={}", &metrics);
+
         Poll::Ready(Ok(response))
     }
 }
