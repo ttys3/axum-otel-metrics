@@ -12,7 +12,6 @@ use opentelemetry_prometheus::PrometheusExporter;
 
 use prometheus::{Encoder, TextEncoder};
 
-use axum_macros::debug_handler;
 use opentelemetry::{Key, KeyValue, Value};
 
 use opentelemetry::metrics::{Counter, Histogram};
@@ -56,7 +55,9 @@ const HTTP_REQ_HISTOGRAM_BUCKETS: &[f64] = &[0.005, 0.01, 0.025, 0.05, 0.1, 0.25
 
 impl PromMetricsLayer {
     pub fn new() -> Self {
-        Self { state: Self::new_state() }
+        Self {
+            state: Self::new_state(),
+        }
     }
 
     pub fn new_state() -> MetricState {
@@ -65,7 +66,10 @@ impl PromMetricsLayer {
         // this must called after the global meter provider has ben initialized
         let meter = global::meter("my-app");
 
-        let http_counter = meter.u64_counter("http.counter").with_description("Counts http request").init();
+        let http_counter = meter
+            .u64_counter("http.counter")
+            .with_description("Counts http request")
+            .init();
 
         let http_histogram = meter
             .f64_histogram("http.histogram")
@@ -103,7 +107,19 @@ impl PromMetricsLayer {
     }
 
     pub fn routes(&self) -> Router<MetricState> {
-        Router::with_state(self.state.clone()).route("/metrics", get(exporter_handler))
+        Router::with_state(self.state.clone()).route(
+            "/metrics",
+            get(|state: State<MetricState>| async { Self::exporter_handler(state) }),
+        )
+    }
+
+    pub fn exporter_handler(state: State<MetricState>) -> impl IntoResponse {
+        tracing::info!("exporter_handler called");
+        let mut buffer = Vec::new();
+        let encoder = TextEncoder::new();
+        encoder.encode(&state.exporter.registry().gather(), &mut buffer).unwrap();
+        // return metrics
+        String::from_utf8(buffer).unwrap()
     }
 }
 
@@ -197,7 +213,10 @@ where
 
         this.state.metric.http_counter.add(&this.state.metric.cx, 1, &labels);
 
-        this.state.metric.http_histogram.record(&this.state.metric.cx, latency, &labels);
+        this.state
+            .metric
+            .http_histogram
+            .record(&this.state.metric.cx, latency, &labels);
 
         tracing::info!(
             "record metrics, method={} latency={} status={} labels={:?}",
@@ -211,21 +230,11 @@ where
     }
 }
 
-#[debug_handler]
-pub async fn exporter_handler(state: State<MetricState>) -> impl IntoResponse {
-    tracing::info!("exporter_handler called");
-    let mut buffer = Vec::new();
-    let encoder = TextEncoder::new();
-    encoder.encode(&state.exporter.registry().gather(), &mut buffer).unwrap();
-    // return metrics
-    String::from_utf8(buffer).unwrap()
-}
-
 #[cfg(test)]
 mod tests {
-    use opentelemetry::{Context, global, KeyValue};
-    use prometheus::{Encoder, TextEncoder};
     use crate::PromMetricsLayer;
+    use opentelemetry::{global, Context, KeyValue};
+    use prometheus::{Encoder, TextEncoder};
 
     #[test]
     fn test_prometheus_exporter() {
@@ -234,14 +243,8 @@ mod tests {
         let meter = global::meter("my-app");
 
         // Use two instruments
-        let counter = meter
-            .u64_counter("a.counter")
-            .with_description("Counts things")
-            .init();
-        let recorder = meter
-            .i64_histogram("a.histogram")
-            .with_description("Records values")
-            .init();
+        let counter = meter.u64_counter("a.counter").with_description("Counts things").init();
+        let recorder = meter.i64_histogram("a.histogram").with_description("Records values").init();
 
         counter.add(&cx, 100, &[KeyValue::new("key", "value")]);
         recorder.record(&cx, 100, &[KeyValue::new("key", "value")]);
