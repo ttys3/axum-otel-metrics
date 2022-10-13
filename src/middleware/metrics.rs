@@ -32,7 +32,7 @@ pub struct Metric {
     pub http_counter: Counter<u64>,
 
     // migrate from ValueRecorder to Histogram if opentelemetry 0.18.0 released
-    pub http_req_histogram: Histogram<f64>,
+    pub http_histogram: Histogram<f64>,
 }
 
 #[derive(Clone)]
@@ -60,7 +60,31 @@ impl PromMetricsLayer {
     }
 
     pub fn new_state() -> MetricState {
-        // init global meter provider and prometheus exporter
+        let exporter = Self::init_meter();
+        let cx = OtelContext::current();
+        // this must called after the global meter provider has ben initialized
+        let meter = global::meter("my-app");
+
+        let http_counter = meter.u64_counter("http.counter").with_description("Counts http request").init();
+
+        let http_histogram = meter
+            .f64_histogram("http.histogram")
+            .with_description("Counts http request latency")
+            .init();
+
+        let meter_state = MetricState {
+            exporter,
+            metric: Metric {
+                cx,
+                http_counter,
+                http_histogram,
+            },
+        };
+
+        meter_state
+    }
+
+    fn init_meter() -> PrometheusExporter {
         let controller = controllers::basic(
             processors::factory(
                 selectors::simple::histogram(HTTP_REQ_HISTOGRAM_BUCKETS),
@@ -74,24 +98,8 @@ impl PromMetricsLayer {
         ]))
         .build();
 
-        let exporter = opentelemetry_prometheus::exporter(controller).init();
-
-        // this must called after the global meter provider has ben initialized
-        let meter = global::meter("my-app");
-
-        let meter_state = MetricState {
-            exporter,
-            metric: Metric {
-                cx: Default::default(),
-                http_counter: meter.u64_counter("http.counter").with_description("Counts http request").init(),
-                http_req_histogram: meter
-                    .f64_histogram("http.histogram")
-                    .with_description("Counts http request latency")
-                    .init(),
-            },
-        };
-
-        meter_state
+        // init global meter provider and prometheus exporter
+        opentelemetry_prometheus::exporter(controller).init()
     }
 
     pub fn routes(&self) -> Router<MetricState> {
@@ -189,7 +197,7 @@ where
 
         this.state.metric.http_counter.add(&this.state.metric.cx, 1, &labels);
 
-        this.state.metric.http_req_histogram.record(&this.state.metric.cx, latency, &labels);
+        this.state.metric.http_histogram.record(&this.state.metric.cx, latency, &labels);
 
         tracing::info!(
             "record metrics, method={} latency={} status={} labels={:?}",
@@ -211,4 +219,38 @@ pub async fn exporter_handler(state: State<MetricState>) -> impl IntoResponse {
     encoder.encode(&state.exporter.registry().gather(), &mut buffer).unwrap();
     // return metrics
     String::from_utf8(buffer).unwrap()
+}
+
+#[cfg(test)]
+mod tests {
+    use opentelemetry::{Context, global, KeyValue};
+    use prometheus::{Encoder, TextEncoder};
+    use crate::PromMetricsLayer;
+
+    #[test]
+    fn test_prometheus_exporter() {
+        let cx = Context::current();
+        let exporter = PromMetricsLayer::init_meter();
+        let meter = global::meter("my-app");
+
+        // Use two instruments
+        let counter = meter
+            .u64_counter("a.counter")
+            .with_description("Counts things")
+            .init();
+        let recorder = meter
+            .i64_histogram("a.histogram")
+            .with_description("Records values")
+            .init();
+
+        counter.add(&cx, 100, &[KeyValue::new("key", "value")]);
+        recorder.record(&cx, 100, &[KeyValue::new("key", "value")]);
+
+        // Encode data as text or protobuf
+        let encoder = TextEncoder::new();
+        let metric_families = exporter.registry().gather();
+        let mut result = Vec::new();
+        encoder.encode(&metric_families, &mut result).expect("encode failed");
+        println!("{}", String::from_utf8(result).unwrap());
+    }
 }
