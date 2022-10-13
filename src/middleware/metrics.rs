@@ -103,7 +103,11 @@ impl PromMetricsLayer {
         .build();
 
         // init global meter provider and prometheus exporter
-        opentelemetry_prometheus::exporter(controller).init()
+        // TODO support custom registry
+        opentelemetry_prometheus::exporter(controller)
+            .with_registry(prometheus::Registry::new_custom(Some("my_app".into()), None)
+                .expect("create prometheus registry"))
+            .init()
     }
 
     pub fn routes(&self) -> Router<MetricState> {
