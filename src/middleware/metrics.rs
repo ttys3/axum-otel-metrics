@@ -61,8 +61,6 @@ impl PromMetricsLayer {
     }
 
     pub fn new_state() -> MetricState {
-        let meter = global::meter("my-app");
-
         // init global meter provider and prometheus exporter
         let controller = controllers::basic(
             processors::factory(
@@ -78,7 +76,11 @@ impl PromMetricsLayer {
                 KeyValue::new("service.version", env!("CARGO_PKG_VERSION")),
             ]))
         .build();
+
         let exporter = opentelemetry_prometheus::exporter(controller).init();
+
+        // this must called after the global meter provider has ben initialized
+        let meter = global::meter("my-app");
 
         let app_state = MetricState {
             exporter,
