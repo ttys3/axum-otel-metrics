@@ -209,6 +209,6 @@ pub async fn exporter_handler(state: State<MetricState>) -> impl IntoResponse {
     let mut buffer = Vec::new();
     let encoder = TextEncoder::new();
     encoder.encode(&state.exporter.registry().gather(), &mut buffer).unwrap();
-    let metrics = String::from_utf8(buffer).unwrap();
-    metrics
+    // return metrics
+    String::from_utf8(buffer).unwrap()
 }

@@ -49,7 +49,7 @@ async fn main() {
 
 async fn handler(state: State<SharedState>, path: MatchedPath) -> Html<String> {
     let mut rng = rand::thread_rng();
-    let mut delay_ms = rng.gen_range(0..700);
+    let delay_ms: u64;
     match path.as_str() {
         "/hello" => {
             delay_ms = rng.gen_range(0..300);
