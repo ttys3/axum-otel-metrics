@@ -30,7 +30,7 @@ pub struct Metric {
     pub cx: OtelContext,
     pub http_counter: Counter<u64>,
 
-    // migrate from ValueRecorder to Histogram if opentelemetry 0.18.0 released
+    // before opentelemetry 0.18.0, Histogram called ValueRecorder
     pub http_histogram: Histogram<f64>,
 }
 
