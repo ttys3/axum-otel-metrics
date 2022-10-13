@@ -44,19 +44,19 @@ pub struct MetricState {
 
 #[derive(Clone)]
 pub struct PromMetrics<S> {
-    pub(crate) state: Arc<MetricState>,
+    pub(crate) state: MetricState,
     service: S,
 }
 
 #[derive(Clone)]
 pub struct PromMetricsLayer {
-    pub(crate) state: Arc<MetricState>,
+    pub(crate) state: MetricState,
 }
 
 impl PromMetricsLayer {
     pub fn new() -> Self {
         Self {
-            state: Arc::new(Self::new_state()),
+            state: Self::new_state(),
         }
     }
 
@@ -100,7 +100,7 @@ impl PromMetricsLayer {
         app_state
     }
 
-    pub fn routes(&self) -> Router<Arc<MetricState>> {
+    pub fn routes(&self) -> Router<MetricState> {
         Router::with_state(self.state.clone()).route("/metrics", get(exporter_handler))
     }
 }
@@ -124,7 +124,7 @@ pin_project! {
         #[pin]
         start: Instant,
         #[pin]
-        state: Arc<MetricState>,
+        state: MetricState,
         #[pin]
         path: String,
         #[pin]
@@ -175,9 +175,9 @@ where
         let this = self.project();
         let response = ready!(this.inner.poll(cx))?;
 
-        if this.path.clone() == "/metrics" {
-            return Ready(Ok(response));
-        }
+        // if this.path.clone() == "/metrics" {
+        //     return Ready(Ok(response));
+        // }
 
         let latency = this.start.elapsed().as_secs_f64();
         let status = response.status().as_u16().to_string();
@@ -208,7 +208,6 @@ where
             &status,
             &labels
         );
-        println!("ResponseFuture::poll");
 
         let mut buffer = Vec::new();
         let encoder = TextEncoder::new();
@@ -223,7 +222,7 @@ where
 }
 
 #[debug_handler]
-pub async fn exporter_handler(state: State<Arc<MetricState>>) -> impl IntoResponse {
+pub async fn exporter_handler(state: State<MetricState>) -> impl IntoResponse {
     println!("metrics api");
     let mut buffer = Vec::new();
     let encoder = TextEncoder::new();
