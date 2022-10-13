@@ -9,7 +9,7 @@ use rand::Rng;
 use std::net::SocketAddr;
 use std::time;
 
-use crate::middleware::metrics::{PromMetricsLayerBuilder};
+use crate::middleware::metrics::PromMetricsLayerBuilder;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[derive(Clone)]
@@ -35,11 +35,7 @@ async fn main() {
         .with_service_name(env!("CARGO_PKG_NAME").to_string())
         .with_service_version(env!("CARGO_PKG_VERSION").to_string())
         .with_prefix("axum_metrics_demo".to_string())
-        .with_labels(
-            vec![("env".to_string(), "dev".to_string())]
-                .into_iter()
-                .collect(),
-        )
+        .with_labels(vec![("env".to_string(), "dev".to_string())].into_iter().collect())
         .build();
 
     // build our application with a route

@@ -1,7 +1,7 @@
-use std::collections::HashMap;
 use axum::extract::State;
 use axum::http::Response;
 use axum::{extract::MatchedPath, http::Request, response::IntoResponse, routing::get, Router};
+use std::collections::HashMap;
 
 use std::future::Future;
 use std::pin::Pin;
@@ -130,22 +130,19 @@ impl PromMetricsLayerBuilder {
                 selectors::simple::histogram(HTTP_REQ_HISTOGRAM_BUCKETS),
                 aggregation::cumulative_temporality_selector(),
             )
-                .with_memory(true),
+            .with_memory(true),
         )
-            .with_resource(resource)
-            .build();
+        .with_resource(resource)
+        .build();
 
         let registry = if let Some(prefix) = self.prefix {
-            prometheus::Registry::new_custom(Some(prefix), self.labels)
-                .expect("create prometheus registry")
+            prometheus::Registry::new_custom(Some(prefix), self.labels).expect("create prometheus registry")
         } else {
             prometheus::Registry::new()
         };
 
         // init global meter provider and prometheus exporter
-        let exporter = opentelemetry_prometheus::exporter(controller)
-            .with_registry(registry)
-            .init();
+        let exporter = opentelemetry_prometheus::exporter(controller).with_registry(registry).init();
 
         let cx = OtelContext::current();
         // this must called after the global meter provider has ben initialized
@@ -170,9 +167,7 @@ impl PromMetricsLayerBuilder {
             },
         };
 
-        PromMetricsLayer{
-            state: meter_state,
-        }
+        PromMetricsLayer { state: meter_state }
     }
 }
 
@@ -285,12 +280,12 @@ where
 
 #[cfg(test)]
 mod tests {
-    use opentelemetry::{global, Context, KeyValue};
+    use crate::middleware::metrics::HTTP_REQ_HISTOGRAM_BUCKETS;
     use opentelemetry::sdk::export::metrics::aggregation;
     use opentelemetry::sdk::metrics::{controllers, processors, selectors};
+    use opentelemetry::{global, Context, KeyValue};
     use opentelemetry_prometheus::PrometheusExporter;
     use prometheus::{Encoder, TextEncoder};
-    use crate::middleware::metrics::{HTTP_REQ_HISTOGRAM_BUCKETS};
 
     // init global meter provider and prometheus exporter
     fn init_meter() -> PrometheusExporter {
@@ -299,14 +294,13 @@ mod tests {
                 selectors::simple::histogram(HTTP_REQ_HISTOGRAM_BUCKETS),
                 aggregation::cumulative_temporality_selector(),
             )
-                .with_memory(true),
+            .with_memory(true),
         )
-            .build();
+        .build();
 
         // this will setup the global meter provider
         opentelemetry_prometheus::exporter(controller)
-            .with_registry(prometheus::Registry::new_custom(Some("axum_app".into()), None)
-                .expect("create prometheus registry"))
+            .with_registry(prometheus::Registry::new_custom(Some("axum_app".into()), None).expect("create prometheus registry"))
             .init()
     }
 
