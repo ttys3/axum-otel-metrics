@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use axum::extract::State;
 use axum::http::Response;
 use axum::{extract::MatchedPath, http::Request, response::IntoResponse, routing::get, Router};
@@ -54,17 +55,101 @@ pub struct PromMetricsLayer {
 const HTTP_REQ_HISTOGRAM_BUCKETS: &[f64] = &[0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0];
 
 impl PromMetricsLayer {
+    pub fn routes(&self) -> Router<MetricState> {
+        Router::with_state(self.state.clone()).route(
+            "/metrics",
+            get(|state: State<MetricState>| async { Self::exporter_handler(state) }),
+        )
+    }
+
+    pub fn exporter_handler(state: State<MetricState>) -> impl IntoResponse {
+        tracing::info!("exporter_handler called");
+        let mut buffer = Vec::new();
+        let encoder = TextEncoder::new();
+        encoder.encode(&state.exporter.registry().gather(), &mut buffer).unwrap();
+        // return metrics
+        String::from_utf8(buffer).unwrap()
+    }
+}
+
+#[derive(Clone)]
+pub struct PromMetricsLayerBuilder {
+    service_name: Option<String>,
+    service_version: Option<String>,
+    prefix: Option<String>,
+    labels: Option<HashMap<String, String>>,
+}
+
+impl PromMetricsLayerBuilder {
     pub fn new() -> Self {
         Self {
-            state: Self::new_state(),
+            service_name: None,
+            service_version: None,
+            prefix: None,
+            labels: None,
         }
     }
 
-    pub fn new_state() -> MetricState {
-        let exporter = Self::init_meter();
+    pub fn with_service_name(mut self, service_name: String) -> Self {
+        self.service_name = Some(service_name);
+        self
+    }
+
+    pub fn with_service_version(mut self, service_version: String) -> Self {
+        self.service_version = Some(service_version);
+        self
+    }
+
+    pub fn with_prefix(mut self, prefix: String) -> Self {
+        self.prefix = Some(prefix);
+        self
+    }
+
+    pub fn with_labels(mut self, labels: HashMap<String, String>) -> Self {
+        self.labels = Some(labels);
+        self
+    }
+
+    pub fn build(self) -> PromMetricsLayer {
+        let mut resource = vec![];
+        if let Some(service_name) = self.service_name {
+            resource.push(KeyValue::new("service.name", service_name));
+        }
+        if let Some(service_version) = self.service_version {
+            resource.push(KeyValue::new("service.version", service_version));
+        }
+
+        let resource = if resource.is_empty() {
+            Resource::empty()
+        } else {
+            Resource::new(resource)
+        };
+
+        let controller = controllers::basic(
+            processors::factory(
+                selectors::simple::histogram(HTTP_REQ_HISTOGRAM_BUCKETS),
+                aggregation::cumulative_temporality_selector(),
+            )
+                .with_memory(true),
+        )
+            .with_resource(resource)
+            .build();
+
+        let registry = if let Some(prefix) = self.prefix {
+            prometheus::Registry::new_custom(Some(prefix), self.labels)
+                .expect("create prometheus registry")
+        } else {
+            prometheus::Registry::new()
+        };
+
+        // init global meter provider and prometheus exporter
+        let exporter = opentelemetry_prometheus::exporter(controller)
+            .with_registry(registry)
+            .init();
+
         let cx = OtelContext::current();
         // this must called after the global meter provider has ben initialized
-        let meter = global::meter("my-app");
+        let meter = global::meter("axum-app");
 
         let http_counter = meter
             .u64_counter("http.counter")
@@ -85,45 +170,9 @@ impl PromMetricsLayer {
             },
         };
 
-        meter_state
-    }
-
-    fn init_meter() -> PrometheusExporter {
-        let controller = controllers::basic(
-            processors::factory(
-                selectors::simple::histogram(HTTP_REQ_HISTOGRAM_BUCKETS),
-                aggregation::cumulative_temporality_selector(),
-            )
-            .with_memory(true),
-        )
-        .with_resource(Resource::new(vec![
-            KeyValue::new("service.name", env!("CARGO_PKG_NAME")),
-            KeyValue::new("service.version", env!("CARGO_PKG_VERSION")),
-        ]))
-        .build();
-
-        // init global meter provider and prometheus exporter
-        // TODO support custom registry
-        opentelemetry_prometheus::exporter(controller)
-            .with_registry(prometheus::Registry::new_custom(Some("my_app".into()), None)
-                .expect("create prometheus registry"))
-            .init()
-    }
-
-    pub fn routes(&self) -> Router<MetricState> {
-        Router::with_state(self.state.clone()).route(
-            "/metrics",
-            get(|state: State<MetricState>| async { Self::exporter_handler(state) }),
-        )
-    }
-
-    pub fn exporter_handler(state: State<MetricState>) -> impl IntoResponse {
-        tracing::info!("exporter_handler called");
-        let mut buffer = Vec::new();
-        let encoder = TextEncoder::new();
-        encoder.encode(&state.exporter.registry().gather(), &mut buffer).unwrap();
-        // return metrics
-        String::from_utf8(buffer).unwrap()
+        PromMetricsLayer{
+            state: meter_state,
+        }
     }
 }
 
@@ -236,14 +285,35 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::PromMetricsLayer;
     use opentelemetry::{global, Context, KeyValue};
+    use opentelemetry::sdk::export::metrics::aggregation;
+    use opentelemetry::sdk::metrics::{controllers, processors, selectors};
+    use opentelemetry_prometheus::PrometheusExporter;
     use prometheus::{Encoder, TextEncoder};
+    use crate::middleware::metrics::{HTTP_REQ_HISTOGRAM_BUCKETS};
+
+    // init global meter provider and prometheus exporter
+    fn init_meter() -> PrometheusExporter {
+        let controller = controllers::basic(
+            processors::factory(
+                selectors::simple::histogram(HTTP_REQ_HISTOGRAM_BUCKETS),
+                aggregation::cumulative_temporality_selector(),
+            )
+                .with_memory(true),
+        )
+            .build();
+
+        // this will setup the global meter provider
+        opentelemetry_prometheus::exporter(controller)
+            .with_registry(prometheus::Registry::new_custom(Some("axum_app".into()), None)
+                .expect("create prometheus registry"))
+            .init()
+    }
 
     #[test]
     fn test_prometheus_exporter() {
         let cx = Context::current();
-        let exporter = PromMetricsLayer::init_meter();
+        let exporter = init_meter();
         let meter = global::meter("my-app");
 
         // Use two instruments
