@@ -28,7 +28,6 @@ use pin_project_lite::pin_project;
 
 #[derive(Clone)]
 pub struct Metric {
-    pub cx: OtelContext,
     pub http_counter: Counter<u64>,
 
     // before opentelemetry 0.18.0, Histogram called ValueRecorder
@@ -143,8 +142,6 @@ impl PromMetricsLayerBuilder {
 
         // init global meter provider and prometheus exporter
         let exporter = opentelemetry_prometheus::exporter(controller).with_registry(registry).init();
-
-        let cx = OtelContext::current();
         // this must called after the global meter provider has ben initialized
         let meter = global::meter("axum-app");
 
@@ -161,7 +158,6 @@ impl PromMetricsLayerBuilder {
         let meter_state = MetricState {
             exporter,
             metric: Metric {
-                cx,
                 http_counter,
                 http_histogram,
             },
@@ -259,12 +255,11 @@ where
             KeyValue::new("status", status.clone()),
         ];
 
-        this.state.metric.http_counter.add(&this.state.metric.cx, 1, &labels);
+        let cx = OtelContext::current();
 
-        this.state
-            .metric
-            .http_histogram
-            .record(&this.state.metric.cx, latency, &labels);
+        this.state.metric.http_counter.add(&cx, 1, &labels);
+
+        this.state.metric.http_histogram.record(&cx, latency, &labels);
 
         tracing::info!(
             "record metrics, method={} latency={} status={} labels={:?}",
