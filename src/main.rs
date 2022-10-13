@@ -6,7 +6,8 @@ mod middleware;
 use axum::{response::Html, routing::get, Router};
 use std::net::SocketAddr;
 use std::time;
-use axum::extract::State;
+use axum::extract::{MatchedPath, State};
+use rand::Rng;
 
 use crate::middleware::metrics::PromMetricsLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
@@ -14,6 +15,7 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 #[derive(Clone)]
 pub struct SharedState {
     pub root_dir: String,
+    // pub rnd: rand::thread_rng(),
 }
 
 #[tokio::main]
@@ -37,6 +39,7 @@ async fn main() {
         .merge(metrics.routes())
         .route("/", get(handler))
         .route("/hello", get(handler))
+        .route("/world", get(handler))
         .route_layer(metrics);
 
     // run it
@@ -48,7 +51,14 @@ async fn main() {
         .unwrap();
 }
 
-async fn handler(state: State<SharedState>) -> Html<String> {
-    std::thread::sleep(time::Duration::from_millis(800));
-    Html(format!("<h1>Hello, World!</h1> root_dir={}", state.root_dir))
+async fn handler(state: State<SharedState>, path: MatchedPath) -> Html<String> {
+    let mut rng = rand::thread_rng();
+    let delay_ms: u64 = rng.gen::<u64>() % 800;
+    std::thread::sleep(time::Duration::from_millis(delay_ms));
+    Html(format!("<h1>Request path: {}</h1> <hr />\nroot_dir={}\nsleep_ms={}\n\
+    <hr /><a href='/' style='display: inline-block; width: 100px;'>/</a>\n\
+    <a href='/hello' style='display: inline-block; width: 100px;'>/hello</a>\n\
+    <a href='/world' style='display: inline-block; width: 100px;'>/world</a>\n\
+    <hr /><a href='/metrics'>/metrics</a>\n\n",
+                 path.as_str(), state.root_dir, delay_ms))
 }

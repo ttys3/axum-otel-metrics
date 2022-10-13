@@ -24,3 +24,4 @@ futures-util = "0.3.24"
 pin-project-lite = "0.2.9"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tracing-opentelemetry = "0.18.0"
+rand = "0.8.5"

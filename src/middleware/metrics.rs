@@ -4,7 +4,6 @@ use axum::{extract::MatchedPath, http::Request, response::IntoResponse, routing:
 
 use std::future::Future;
 use std::pin::Pin;
-use std::sync::Arc;
 use std::task::Poll::Ready;
 use std::task::{Context, Poll};
 use std::time::Instant;
@@ -53,6 +52,8 @@ pub struct PromMetricsLayer {
     pub(crate) state: MetricState,
 }
 
+const HTTP_REQ_HISTOGRAM_BUCKETS: &[f64] = &[0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0];
+
 impl PromMetricsLayer {
     pub fn new() -> Self {
         Self {
@@ -64,9 +65,7 @@ impl PromMetricsLayer {
         // init global meter provider and prometheus exporter
         let controller = controllers::basic(
             processors::factory(
-                selectors::simple::histogram([
-                    0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0,
-                ]),
+                selectors::simple::histogram(HTTP_REQ_HISTOGRAM_BUCKETS),
                 aggregation::cumulative_temporality_selector(),
             )
             .with_memory(true),
@@ -82,7 +81,7 @@ impl PromMetricsLayer {
         // this must called after the global meter provider has ben initialized
         let meter = global::meter("my-app");
 
-        let app_state = MetricState {
+        let meter_state = MetricState {
             exporter,
             metric: Metric {
                 cx: Default::default(),
@@ -97,9 +96,7 @@ impl PromMetricsLayer {
             },
         };
 
-        app_state.metric.http_counter.add(&app_state.metric.cx, 1, &[]);
-        app_state.metric.http_counter.add(&app_state.metric.cx, 1, &[]);
-        app_state
+        meter_state
     }
 
     pub fn routes(&self) -> Router<MetricState> {
@@ -177,6 +174,8 @@ where
         let this = self.project();
         let response = ready!(this.inner.poll(cx))?;
 
+        // do not skip the metrics api itself, for development purpose
+        // @TODO add a filter Fn to allow skip specific api, like tokio tracing Filter
         // if this.path.clone() == "/metrics" {
         //     return Ready(Ok(response));
         // }
@@ -204,28 +203,20 @@ where
             .record(&this.state.metric.cx, latency, &labels);
 
         tracing::info!(
-            "method={} latency={} status={} labels={:?}",
+            "record metrics, method={} latency={} status={} labels={:?}",
             &this.method,
             &latency,
             &status,
             &labels
         );
 
-        let mut buffer = Vec::new();
-        let encoder = TextEncoder::new();
-        encoder
-            .encode(&this.state.exporter.registry().gather(), &mut buffer)
-            .unwrap();
-        let metrics = String::from_utf8(buffer).unwrap();
-        tracing::info!("metrics={}", &metrics);
-
-        Poll::Ready(Ok(response))
+        Ready(Ok(response))
     }
 }
 
 #[debug_handler]
 pub async fn exporter_handler(state: State<MetricState>) -> impl IntoResponse {
-    println!("metrics api");
+    tracing::info!("exporter_handler called");
     let mut buffer = Vec::new();
     let encoder = TextEncoder::new();
     encoder

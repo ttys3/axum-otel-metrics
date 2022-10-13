@@ -181,6 +181,7 @@ dependencies = [
  "opentelemetry-prometheus",
  "pin-project-lite",
  "prometheus",
+ "rand",
  "tokio",
  "tower",
  "tracing",
