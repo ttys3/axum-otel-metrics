@@ -42,15 +42,29 @@ async fn main() {
         .route_layer(metrics);
 
     // run it
-    let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
+    let addr = SocketAddr::from(([0, 0, 0, 0], 3000));
     println!("listening on {}", addr);
     axum::Server::bind(&addr).serve(app.into_make_service()).await.unwrap();
 }
 
 async fn handler(state: State<SharedState>, path: MatchedPath) -> Html<String> {
     let mut rng = rand::thread_rng();
-    let delay_ms: u64 = rng.gen::<u64>() % 800;
-    std::thread::sleep(time::Duration::from_millis(delay_ms));
+    let mut delay_ms = rng.gen_range(0..700);
+    match path.as_str() {
+        "/hello" => {
+            delay_ms = rng.gen_range(0..300);
+            std::thread::sleep(time::Duration::from_millis(delay_ms))
+        }
+        "/world" => {
+            delay_ms = rng.gen_range(0..500);
+            std::thread::sleep(time::Duration::from_millis(delay_ms))
+        }
+        _ => {
+            delay_ms = rng.gen_range(0..100);
+            std::thread::sleep(time::Duration::from_millis(delay_ms))
+        }
+    }
+
     Html(format!(
         "<h1>Request path: {}</h1> <hr />\nroot_dir={}\nsleep_ms={}\n\
     <hr /><a href='/' style='display: inline-block; width: 100px;'>/</a>\n\
