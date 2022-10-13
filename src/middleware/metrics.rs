@@ -24,6 +24,7 @@ use opentelemetry::{global, Context as OtelContext};
 use tower::{Layer, Service};
 
 use futures_util::ready;
+use opentelemetry::sdk::Resource;
 use pin_project_lite::pin_project;
 
 #[derive(Clone)]
@@ -72,6 +73,10 @@ impl PromMetricsLayer {
             )
             .with_memory(true),
         )
+            .with_resource(Resource::new(vec![
+                KeyValue::new("service.name", env!("CARGO_PKG_NAME")),
+                KeyValue::new("service.version", env!("CARGO_PKG_VERSION")),
+            ]))
         .build();
         let exporter = opentelemetry_prometheus::exporter(controller).init();
 
@@ -90,6 +95,8 @@ impl PromMetricsLayer {
             },
         };
 
+        app_state.metric.http_counter.add(&app_state.metric.cx, 1, &[]);
+        app_state.metric.http_counter.add(&app_state.metric.cx, 1, &[]);
         app_state
     }
 

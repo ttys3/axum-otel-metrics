@@ -6,6 +6,7 @@ mod middleware;
 use axum::{response::Html, routing::get, Router};
 use std::net::SocketAddr;
 use std::time;
+use axum::extract::State;
 
 use crate::middleware::metrics::PromMetricsLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
@@ -47,7 +48,7 @@ async fn main() {
         .unwrap();
 }
 
-async fn handler() -> Html<&'static str> {
+async fn handler(state: State<SharedState>) -> Html<String> {
     std::thread::sleep(time::Duration::from_millis(800));
-    Html("<h1>Hello, World!</h1>")
+    Html(format!("<h1>Hello, World!</h1> root_dir={}", state.root_dir))
 }
