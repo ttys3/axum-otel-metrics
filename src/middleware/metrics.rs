@@ -56,9 +56,7 @@ const HTTP_REQ_HISTOGRAM_BUCKETS: &[f64] = &[0.005, 0.01, 0.025, 0.05, 0.1, 0.25
 
 impl PromMetricsLayer {
     pub fn new() -> Self {
-        Self {
-            state: Self::new_state(),
-        }
+        Self { state: Self::new_state() }
     }
 
     pub fn new_state() -> MetricState {
@@ -70,10 +68,10 @@ impl PromMetricsLayer {
             )
             .with_memory(true),
         )
-            .with_resource(Resource::new(vec![
-                KeyValue::new("service.name", env!("CARGO_PKG_NAME")),
-                KeyValue::new("service.version", env!("CARGO_PKG_VERSION")),
-            ]))
+        .with_resource(Resource::new(vec![
+            KeyValue::new("service.name", env!("CARGO_PKG_NAME")),
+            KeyValue::new("service.version", env!("CARGO_PKG_VERSION")),
+        ]))
         .build();
 
         let exporter = opentelemetry_prometheus::exporter(controller).init();
@@ -85,10 +83,7 @@ impl PromMetricsLayer {
             exporter,
             metric: Metric {
                 cx: Default::default(),
-                http_counter: meter
-                    .u64_counter("http.counter")
-                    .with_description("Counts http request")
-                    .init(),
+                http_counter: meter.u64_counter("http.counter").with_description("Counts http request").init(),
                 http_req_histogram: meter
                     .f64_histogram("http.histogram")
                     .with_description("Counts http request latency")
@@ -192,15 +187,9 @@ where
             KeyValue::new("status", status.clone()),
         ];
 
-        this.state
-            .metric
-            .http_counter
-            .add(&this.state.metric.cx, 1, &labels);
+        this.state.metric.http_counter.add(&this.state.metric.cx, 1, &labels);
 
-        this.state
-            .metric
-            .http_req_histogram
-            .record(&this.state.metric.cx, latency, &labels);
+        this.state.metric.http_req_histogram.record(&this.state.metric.cx, latency, &labels);
 
         tracing::info!(
             "record metrics, method={} latency={} status={} labels={:?}",
@@ -219,9 +208,7 @@ pub async fn exporter_handler(state: State<MetricState>) -> impl IntoResponse {
     tracing::info!("exporter_handler called");
     let mut buffer = Vec::new();
     let encoder = TextEncoder::new();
-    encoder
-        .encode(&state.exporter.registry().gather(), &mut buffer)
-        .unwrap();
+    encoder.encode(&state.exporter.registry().gather(), &mut buffer).unwrap();
     let metrics = String::from_utf8(buffer).unwrap();
     metrics
 }
