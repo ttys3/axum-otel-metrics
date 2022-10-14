@@ -17,10 +17,12 @@ let metrics = HttpMetricsLayerBuilder::new()
     .build();
 
 let app = Router::new()
+    // export metrics at `/metrics` endpoint
     .merge(metrics.routes())
     .route("/", get(handler))
     .route("/hello", get(handler))
     .route("/world", get(handler))
+    // add the metrics middleware
     .layer(metrics);
 ```
 

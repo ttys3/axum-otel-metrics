@@ -1,3 +1,51 @@
+//! [axum](https://github.com/tokio-rs/axum) OpenTelemetry Metrics middleware with prometheus exporter
+//!
+//! ## Simple Usage
+//! ```
+//! use axum_otel_metrics::HttpMetricsLayerBuilder;
+//!
+//! let metrics = HttpMetricsLayerBuilder::new()
+//!     .build();
+//!
+//! let app = Router::new()
+//!     // export metrics at `/metrics` endpoint
+//!     .merge(metrics.routes())
+//!     .route("/", get(handler))
+//!     .route("/hello", get(handler))
+//!     .route("/world", get(handler))
+//!     // add the metrics middleware
+//!     .layer(metrics);
+//!
+//! async fn handler() -> Html<&'static str> {
+//!     Html("<h1>Hello, World!</h1>")
+//! }
+//! ```
+//!
+//! ## Advanced Usage
+//! ```
+//! use axum_otel_metrics::HttpMetricsLayerBuilder;
+//!
+//! let metrics = HttpMetricsLayerBuilder::new()
+//! .with_service_name(env!("CARGO_PKG_NAME").to_string())
+//! .with_service_version(env!("CARGO_PKG_VERSION").to_string())
+//! .with_prefix("axum_metrics_demo".to_string())
+//! .with_labels(vec![("env".to_string(), "testing".to_string())].into_iter().collect())
+//! .build();
+//!
+//! let app = Router::new()
+//!     // export metrics at `/metrics` endpoint
+//!     .merge(metrics.routes())
+//!     .route("/", get(handler))
+//!     .route("/hello", get(handler))
+//!     .route("/world", get(handler))
+//!     // add the metrics middleware
+//!     .layer(metrics);
+//!
+//! async fn handler() -> Html<&'static str> {
+//!     Html("<h1>Hello, World!</h1>")
+//! }
+//! ```
+
 use axum::extract::State;
 use axum::http::Response;
 use axum::{extract::MatchedPath, http::Request, response::IntoResponse, routing::get, Router};
@@ -71,25 +119,6 @@ impl HttpMetricsLayer {
     }
 }
 
-/// Create a new HttpMetricsLayer
-/// # Example
-/// ```
-/// use axum_otel_metrics::HttpMetricsLayerBuilder;
-///
-/// let metrics = HttpMetricsLayerBuilder::new()
-///     .build();
-///
-/// let app = Router::new()
-///     .merge(metrics.routes())
-///     .route("/", get(handler))
-///     .route("/hello", get(handler))
-///     .route("/world", get(handler))
-///     .layer(metrics);
-///
-/// async fn handler() -> Html<&'static str> {
-///     Html("<h1>Hello, World!</h1>")
-/// }
-/// ```
 #[derive(Clone, Default)]
 pub struct HttpMetricsLayerBuilder {
     service_name: Option<String>,
