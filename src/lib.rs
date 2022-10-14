@@ -71,7 +71,7 @@ impl HttpMetricsLayer {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct HttpMetricsLayerBuilder {
     service_name: Option<String>,
     service_version: Option<String>,
@@ -81,12 +81,7 @@ pub struct HttpMetricsLayerBuilder {
 
 impl HttpMetricsLayerBuilder {
     pub fn new() -> Self {
-        Self {
-            service_name: None,
-            service_version: None,
-            prefix: None,
-            labels: None,
-        }
+        Self::default()
     }
 
     pub fn with_service_name(mut self, service_name: String) -> Self {
@@ -252,7 +247,7 @@ where
                 value: Value::from(this.method.clone()),
             },
             KeyValue::new("path", this.path.clone()),
-            KeyValue::new("status", status.clone()),
+            KeyValue::new("status", status),
         ];
 
         let cx = OtelContext::current();

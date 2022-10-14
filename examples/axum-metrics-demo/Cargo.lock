@@ -68,15 +68,27 @@ dependencies = [
 ]
 
 [[package]]
-name = "axum-otel-metrics"
+name = "axum-metrics-prom-demo"
 version = "0.1.1"
+dependencies = [
+ "axum",
+ "axum-otel-metrics",
+ "rand",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "axum-otel-metrics"
+version = "0.1.2"
 dependencies = [
  "axum",
  "futures-util",
  "opentelemetry",
  "opentelemetry-prometheus",
  "pin-project-lite",
- "prometheus 0.13.2",
+ "prometheus",
  "tokio",
  "tower",
 ]
@@ -522,7 +534,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "06c3d833835a53cf91331d2cfb27e9121f5a95261f31f08a1f79ab31688b8da8"
 dependencies = [
  "opentelemetry",
- "prometheus 0.13.2",
+ "prometheus",
  "protobuf",
 ]
 
@@ -644,24 +656,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "94e2ef8dbfc347b10c094890f778ee2e36ca9bb4262e86dc99cd217e35f3470b"
 dependencies = [
  "unicode-ident",
-]
-
-[[package]]
-name = "prometheus"
-version = "0.1.1"
-dependencies = [
- "axum",
- "axum-otel-metrics",
- "futures-util",
- "opentelemetry",
- "opentelemetry-prometheus",
- "pin-project-lite",
- "prometheus 0.13.2",
- "rand",
- "tokio",
- "tower",
- "tracing",
- "tracing-subscriber",
 ]
 
 [[package]]
