@@ -77,10 +77,8 @@ dependencies = [
  "opentelemetry-prometheus",
  "pin-project-lite",
  "prometheus 0.13.2",
- "rand",
  "tokio",
  "tower",
- "tracing",
 ]
 
 [[package]]

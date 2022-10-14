@@ -19,7 +19,7 @@ axum is an ergonomic and modular web framework built with Tokio, Tower, and Hype
     .route("/", get(handler))
     .route("/hello", get(handler))
     .route("/world", get(handler))
-    .route_layer(metrics);
+    .layer(metrics);
 ```
 
 ## OpenTelemetry Rust Instrumentation Status and Releases

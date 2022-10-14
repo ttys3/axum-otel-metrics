@@ -38,7 +38,7 @@ async fn main() {
         .route("/", get(handler))
         .route("/hello", get(handler))
         .route("/world", get(handler))
-        .route_layer(metrics);
+        .layer(metrics);
 
     // run it
     let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
