@@ -3,6 +3,7 @@
 //! ## Simple Usage
 //! ```
 //! use axum_otel_metrics::HttpMetricsLayerBuilder;
+//! use axum::{response::Html, routing::get, Router};
 //!
 //! let metrics = HttpMetricsLayerBuilder::new()
 //!     .build();
@@ -24,6 +25,7 @@
 //! ## Advanced Usage
 //! ```
 //! use axum_otel_metrics::HttpMetricsLayerBuilder;
+//! use axum::{response::Html, routing::get, Router};
 //!
 //! let metrics = HttpMetricsLayerBuilder::new()
 //! .with_service_name(env!("CARGO_PKG_NAME").to_string())
