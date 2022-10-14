@@ -1,5 +1,9 @@
 # axum-otel-metrics
 
+[![Build status](https://github.com/ttys3/axum-otel-metrics/actions/workflows/rust.yml/badge.svg?branch=main)](https://github.com/ttys3/axum-otel-metrics/actions/workflows/rust.yml)
+[![Crates.io](https://img.shields.io/crates/v/axum-otel-metrics)](https://crates.io/crates/axum-otel-metrics)
+[![Documentation](https://docs.rs/axum-otel-metrics/badge.svg)](https://docs.rs/axum-otel-metrics)
+
 OpenTelemetry Metrics middleware for [axum](https://github.com/tokio-rs/axum) http server
 
 axum is an ergonomic and modular web framework built with Tokio, Tower, and Hyper
