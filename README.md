@@ -11,10 +11,12 @@ axum is an ergonomic and modular web framework built with Tokio, Tower, and Hype
 ## Usage
 
 ```rust
-    let metrics = HttpMetricsLayerBuilder::new()
-        .build();
+use axum_otel_metrics::HttpMetricsLayerBuilder;
 
-    let app = Router::new()
+let metrics = HttpMetricsLayerBuilder::new()
+    .build();
+
+let app = Router::new()
     .merge(metrics.routes())
     .route("/", get(handler))
     .route("/hello", get(handler))

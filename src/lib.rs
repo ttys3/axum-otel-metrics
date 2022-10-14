@@ -71,6 +71,25 @@ impl HttpMetricsLayer {
     }
 }
 
+/// Create a new HttpMetricsLayer
+/// # Example
+/// ```
+/// use axum_otel_metrics::HttpMetricsLayerBuilder;
+///
+/// let metrics = HttpMetricsLayerBuilder::new()
+///     .build();
+///
+/// let app = Router::new()
+///     .merge(metrics.routes())
+///     .route("/", get(handler))
+///     .route("/hello", get(handler))
+///     .route("/world", get(handler))
+///     .layer(metrics);
+///
+/// async fn handler() -> Html<&'static str> {
+///     Html("<h1>Hello, World!</h1>")
+/// }
+/// ```
 #[derive(Clone, Default)]
 pub struct HttpMetricsLayerBuilder {
     service_name: Option<String>,
