@@ -1,9 +1,9 @@
 [package]
 name = "axum-otel-metrics"
-version = "0.1.4"
+version = "0.1.5"
 edition = "2021"
 license = "MIT"
-description = "axum middleware for intergrate OpenTelemetry metrics and export to Prometheus"
+description = "axum OpenTelemetry metrics middleware with prometheus exporter"
 homepage = "https://ttys3.dev/"
 repository = "https://github.com/ttys3/axum-otel-metrics/"
 documentation = "https://docs.rs/axum-otel-metrics"
@@ -14,8 +14,7 @@ exclude = [
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [dependencies]
-axum = { version = "0.6.0-rc.2", features = ["headers"] }
-tokio = { version = "1.21.2", features = ["full", "tracing"] }
+axum = { version = "0.6.0-rc.2" }
 opentelemetry = { version = "0.18.0", features = ["metrics", "rt-tokio"] }
 opentelemetry-prometheus = { version = "0.11.0", features = ["prometheus-encoding"] }
 prometheus = "0.13.2"

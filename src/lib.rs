@@ -282,7 +282,6 @@ where
         let this = self.project();
         let response = ready!(this.inner.poll(cx))?;
 
-        // do not skip the metrics api itself, for development purpose
         // @TODO add a filter Fn to allow skip specific api, like tokio tracing Filter
         // if this.path.clone() == "/metrics" {
         //     return Ready(Ok(response));
