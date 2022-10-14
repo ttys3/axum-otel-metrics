@@ -1,21 +1,15 @@
-// #![feature(generic_associated_types)]
-// #![feature(type_alias_impl_trait)]
-
-mod middleware;
-
 use axum::extract::{MatchedPath, State};
 use axum::{response::Html, routing::get, Router};
 use rand::Rng;
 use std::net::SocketAddr;
 use std::time;
 
-use crate::middleware::metrics::PromMetricsLayerBuilder;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+use axum_otel_metrics::HttpMetricsLayerBuilder;
 
 #[derive(Clone)]
 pub struct SharedState {
     pub root_dir: String,
-    // pub rnd: rand::thread_rng(),
 }
 
 #[tokio::main]
@@ -31,7 +25,7 @@ async fn main() {
         root_dir: String::from("/tmp"),
     };
 
-    let metrics = PromMetricsLayerBuilder::new()
+    let metrics = HttpMetricsLayerBuilder::new()
         .with_service_name(env!("CARGO_PKG_NAME").to_string())
         .with_service_version(env!("CARGO_PKG_VERSION").to_string())
         .with_prefix("axum_metrics_demo".to_string())
@@ -47,7 +41,7 @@ async fn main() {
         .route_layer(metrics);
 
     // run it
-    let addr = SocketAddr::from(([0, 0, 0, 0], 3000));
+    let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
     println!("listening on {}", addr);
     axum::Server::bind(&addr).serve(app.into_make_service()).await.unwrap();
 }

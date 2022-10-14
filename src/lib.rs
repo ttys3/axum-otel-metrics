@@ -41,19 +41,19 @@ pub struct MetricState {
 }
 
 #[derive(Clone)]
-pub struct PromMetrics<S> {
+pub struct HttpMetrics<S> {
     pub(crate) state: MetricState,
     service: S,
 }
 
 #[derive(Clone)]
-pub struct PromMetricsLayer {
+pub struct HttpMetricsLayer {
     pub(crate) state: MetricState,
 }
 
 const HTTP_REQ_HISTOGRAM_BUCKETS: &[f64] = &[0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0];
 
-impl PromMetricsLayer {
+impl HttpMetricsLayer {
     pub fn routes(&self) -> Router<MetricState> {
         Router::with_state(self.state.clone()).route(
             "/metrics",
@@ -62,7 +62,7 @@ impl PromMetricsLayer {
     }
 
     pub fn exporter_handler(state: State<MetricState>) -> impl IntoResponse {
-        tracing::info!("exporter_handler called");
+        tracing::trace!("exporter_handler called");
         let mut buffer = Vec::new();
         let encoder = TextEncoder::new();
         encoder.encode(&state.exporter.registry().gather(), &mut buffer).unwrap();
@@ -72,14 +72,14 @@ impl PromMetricsLayer {
 }
 
 #[derive(Clone)]
-pub struct PromMetricsLayerBuilder {
+pub struct HttpMetricsLayerBuilder {
     service_name: Option<String>,
     service_version: Option<String>,
     prefix: Option<String>,
     labels: Option<HashMap<String, String>>,
 }
 
-impl PromMetricsLayerBuilder {
+impl HttpMetricsLayerBuilder {
     pub fn new() -> Self {
         Self {
             service_name: None,
@@ -109,7 +109,7 @@ impl PromMetricsLayerBuilder {
         self
     }
 
-    pub fn build(self) -> PromMetricsLayer {
+    pub fn build(self) -> HttpMetricsLayer {
         let mut resource = vec![];
         if let Some(service_name) = self.service_name {
             resource.push(KeyValue::new("service.name", service_name));
@@ -163,15 +163,15 @@ impl PromMetricsLayerBuilder {
             },
         };
 
-        PromMetricsLayer { state: meter_state }
+        HttpMetricsLayer { state: meter_state }
     }
 }
 
-impl<S> Layer<S> for PromMetricsLayer {
-    type Service = PromMetrics<S>;
+impl<S> Layer<S> for HttpMetricsLayer {
+    type Service = HttpMetrics<S>;
 
     fn layer(&self, service: S) -> Self::Service {
-        PromMetrics {
+        HttpMetrics {
             state: self.state.clone(),
             service,
         }
@@ -179,7 +179,7 @@ impl<S> Layer<S> for PromMetricsLayer {
 }
 
 pin_project! {
-    /// Response future for [`PromMetrics`].
+    /// Response future for [`HttpMetrics`].
     pub struct ResponseFuture<F> {
         #[pin]
         inner: F,
@@ -194,7 +194,7 @@ pin_project! {
     }
 }
 
-impl<S, R, ResBody> Service<Request<R>> for PromMetrics<S>
+impl<S, R, ResBody> Service<Request<R>> for HttpMetrics<S>
 where
     S: Service<Request<R>, Response = Response<ResBody>>,
 {
@@ -261,7 +261,7 @@ where
 
         this.state.metric.http_histogram.record(&cx, latency, &labels);
 
-        tracing::info!(
+        tracing::trace!(
             "record metrics, method={} latency={} status={} labels={:?}",
             &this.method,
             &latency,
@@ -275,7 +275,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::middleware::metrics::HTTP_REQ_HISTOGRAM_BUCKETS;
+    use crate::HTTP_REQ_HISTOGRAM_BUCKETS;
     use opentelemetry::sdk::export::metrics::aggregation;
     use opentelemetry::sdk::metrics::{controllers, processors, selectors};
     use opentelemetry::{global, Context, KeyValue};
