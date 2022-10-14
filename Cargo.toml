@@ -2,9 +2,14 @@
 name = "axum-otel-metrics"
 version = "0.1.0"
 edition = "2021"
+license = "MIT"
+description = "axum middleware for intergrate OpenTelemetry metrics and export to Prometheus"
+homepage = "https://ttys3.dev/"
+repository = "https://github.com/ttys3/axum-otel-metrics/"
+documentation = "https://docs.rs/axum-otel-metrics"
+readme = "README.md"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
 axum = { git = "https://github.com/tokio-rs/axum.git", branch = "main", features = ["headers"] }
 axum-core = { git = "https://github.com/tokio-rs/axum.git", branch = "main" }

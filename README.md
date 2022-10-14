@@ -4,6 +4,20 @@ OpenTelemetry Metrics middleware for [axum](https://github.com/tokio-rs/axum) ht
 
 axum is an ergonomic and modular web framework built with Tokio, Tower, and Hyper
 
+## Usage
+
+```rust
+    let metrics = HttpMetricsLayerBuilder::new()
+        .build();
+
+    let app = Router::new()
+    .merge(metrics.routes())
+    .route("/", get(handler))
+    .route("/hello", get(handler))
+    .route("/world", get(handler))
+    .route_layer(metrics);
+```
+
 ## OpenTelemetry Rust Instrumentation Status and Releases
 
 https://opentelemetry.io/docs/instrumentation/rust/#status-and-releases
