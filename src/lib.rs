@@ -62,7 +62,7 @@ impl HttpMetricsLayer {
     }
 
     pub fn exporter_handler(state: State<MetricState>) -> impl IntoResponse {
-        tracing::trace!("exporter_handler called");
+        // tracing::trace!("exporter_handler called");
         let mut buffer = Vec::new();
         let encoder = TextEncoder::new();
         encoder.encode(&state.exporter.registry().gather(), &mut buffer).unwrap();
@@ -261,13 +261,13 @@ where
 
         this.state.metric.http_histogram.record(&cx, latency, &labels);
 
-        tracing::trace!(
-            "record metrics, method={} latency={} status={} labels={:?}",
-            &this.method,
-            &latency,
-            &status,
-            &labels
-        );
+        // tracing::trace!(
+        //     "record metrics, method={} latency={} status={} labels={:?}",
+        //     &this.method,
+        //     &latency,
+        //     &status,
+        //     &labels
+        // );
 
         Ready(Ok(response))
     }

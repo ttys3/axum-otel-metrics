@@ -1,24 +1,19 @@
 [package]
 name = "prometheus"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [dependencies]
 axum-otel-metrics = { path = "../../" }
-axum = { version = "0.6.0-rc.2", features = ["headers"] }
-
+axum = { version = "0.6.0-rc.2" }
 tokio = { version = "1.21.2", features = ["full", "tracing"] }
-
 opentelemetry = { version = "0.18.0", features = ["metrics", "rt-tokio"] }
-opentelemetry-otlp = { version = "0.11.0",  features = ["trace"] }
 opentelemetry-prometheus = { version = "0.11.0", features = ["prometheus-encoding"] }
-
 prometheus = "0.13.2"
 tracing = "0.1.37"
 tower = "0.4.13"
 futures-util = "0.3.24"
 pin-project-lite = "0.2.9"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-tracing-opentelemetry = "0.18.0"
 rand = "0.8.5"
