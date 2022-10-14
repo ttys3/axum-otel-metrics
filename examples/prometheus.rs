@@ -4,8 +4,8 @@ use rand::Rng;
 use std::net::SocketAddr;
 use std::time;
 
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use axum_otel_metrics::HttpMetricsLayerBuilder;
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[derive(Clone)]
 pub struct SharedState {
