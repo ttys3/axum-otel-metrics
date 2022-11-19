@@ -33,12 +33,13 @@ async fn main() {
         .build();
 
     // build our application with a route
-    let app = Router::with_state(state.clone())
-        .merge(metrics.routes())
+    let app = Router::new()
+        .merge(metrics.routes::<SharedState>())
         .route("/", get(handler))
         .route("/hello", get(handler))
         .route("/world", get(handler))
-        .layer(metrics);
+        .layer(metrics)
+        .with_state(state.clone());
 
     // run it
     let addr = SocketAddr::from(([127, 0, 0, 1], 3000));

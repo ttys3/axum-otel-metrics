@@ -48,13 +48,13 @@
 //! }
 //! ```
 
-use axum::extract::State;
 use axum::http::Response;
-use axum::{extract::MatchedPath, http::Request, response::IntoResponse, routing::get, Router};
+use axum::{extract::MatchedPath, http::Request, response::IntoResponse, routing::get, Router, Extension};
 use std::collections::HashMap;
 
 use std::future::Future;
 use std::pin::Pin;
+use std::sync::Arc;
 use std::task::Poll::Ready;
 use std::task::{Context, Poll};
 use std::time::Instant;
@@ -104,14 +104,15 @@ pub struct HttpMetricsLayer {
 const HTTP_REQ_HISTOGRAM_BUCKETS: &[f64] = &[0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0];
 
 impl HttpMetricsLayer {
-    pub fn routes(&self) -> Router<MetricState> {
-        Router::with_state(self.state.clone()).route(
+    pub fn routes<S: Send + Sync + Clone + 'static>(&self) -> Router<S> {
+        let state = Arc::new(self.state.clone());
+        Router::new().route(
             "/metrics",
-            get(|state: State<MetricState>| async { Self::exporter_handler(state) }),
-        )
+            get(|state: Extension<Arc<MetricState>>| async { Self::exporter_handler(state) }),
+        ).layer(Extension(state))
     }
 
-    pub fn exporter_handler(state: State<MetricState>) -> impl IntoResponse {
+    pub fn exporter_handler(state: Extension<Arc<MetricState>>) -> impl IntoResponse {
         // tracing::trace!("exporter_handler called");
         let mut buffer = Vec::new();
         let encoder = TextEncoder::new();

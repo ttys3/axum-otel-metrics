@@ -26,6 +26,32 @@ let app = Router::new()
     .layer(metrics);
 ```
 
+## Usage with `State`
+
+```rust
+use axum_otel_metrics::HttpMetricsLayerBuilder;
+
+#[derive(Clone)]
+pub struct SharedState {
+}
+
+let state = SharedState {
+};
+
+let metrics = HttpMetricsLayerBuilder::new()
+    .build();
+
+let app = Router::new()
+    // export metrics at `/metrics` endpoint
+    .merge(metrics.routes::<SharedState>())
+    .route("/", get(handler))
+    .route("/hello", get(handler))
+    .route("/world", get(handler))
+    // add the metrics middleware
+    .layer(metrics)
+    .with_state(state.clone());
+```
+
 ## OpenTelemetry Rust Instrumentation Status and Releases
 
 https://opentelemetry.io/docs/instrumentation/rust/#status-and-releases
