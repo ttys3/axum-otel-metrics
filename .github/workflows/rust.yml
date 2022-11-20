@@ -16,7 +16,13 @@ jobs:
 
     steps:
     - uses: actions/checkout@v3
+    - name: Install latest stable Rust toolchain
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        default: true
+        components: rustfmt, clippy
     - name: Build
-      run: cargo build --verbose
+      run: cargo build
     - name: Run tests
-      run: cargo test --verbose
+      run: cargo test
