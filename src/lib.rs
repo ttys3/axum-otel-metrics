@@ -8,7 +8,7 @@
 //! let metrics = HttpMetricsLayerBuilder::new()
 //!     .build();
 //!
-//! let app = Router::new()
+//! let app = Router::<()>::new()
 //!     // export metrics at `/metrics` endpoint
 //!     .merge(metrics.routes())
 //!     .route("/", get(handler))
@@ -34,7 +34,7 @@
 //! .with_labels(vec![("env".to_string(), "testing".to_string())].into_iter().collect())
 //! .build();
 //!
-//! let app = Router::new()
+//! let app = Router::<()>::new()
 //!     // export metrics at `/metrics` endpoint
 //!     .merge(metrics.routes())
 //!     .route("/", get(handler))
@@ -320,7 +320,9 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::HTTP_REQ_HISTOGRAM_BUCKETS;
+    use axum::Router;
+    use axum::routing::get;
+    use crate::{HTTP_REQ_HISTOGRAM_BUCKETS, HttpMetricsLayerBuilder};
     use opentelemetry::sdk::export::metrics::aggregation;
     use opentelemetry::sdk::metrics::{controllers, processors, selectors};
     use opentelemetry::{global, Context, KeyValue};
@@ -363,5 +365,47 @@ mod tests {
         let mut result = Vec::new();
         encoder.encode(&metric_families, &mut result).expect("encode failed");
         println!("{}", String::from_utf8(result).unwrap());
+    }
+
+    #[test]
+    fn test_builder() {
+        let metrics = HttpMetricsLayerBuilder::new()
+            .build();
+        let _app = Router::new()
+            // export metrics at `/metrics` endpoint
+            .merge(metrics.routes::<()>())
+            .route("/", get(handler))
+            .route("/hello", get(handler))
+            .route("/world", get(handler))
+            // add the metrics middleware
+            .layer(metrics);
+
+        async fn handler() -> &'static str {
+            "<h1>Hello, World!</h1>"
+        }
+    }
+
+    #[test]
+    fn test_builder_with_state_router() {
+
+        #[derive(Clone)]
+        struct AppState {
+        }
+
+        let metrics = HttpMetricsLayerBuilder::new()
+            .build();
+        let _app = Router::new()
+            // export metrics at `/metrics` endpoint
+            .merge(metrics.routes())
+            .route("/", get(handler))
+            .route("/hello", get(handler))
+            .route("/world", get(handler))
+            // add the metrics middleware
+            .layer(metrics)
+            .with_state(AppState{});
+
+        async fn handler() -> &'static str {
+            "<h1>Hello, World!</h1>"
+        }
     }
 }
