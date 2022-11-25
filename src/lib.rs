@@ -226,13 +226,9 @@ pin_project! {
     pub struct ResponseFuture<F> {
         #[pin]
         inner: F,
-        #[pin]
         start: Instant,
-        #[pin]
         state: MetricState,
-        #[pin]
         path: String,
-        #[pin]
         method: String,
     }
 }
