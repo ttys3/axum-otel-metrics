@@ -49,7 +49,7 @@
 //! ```
 
 use axum::http::Response;
-use axum::{extract::MatchedPath, http::Request, response::IntoResponse, routing::get, Router, Extension};
+use axum::{extract::MatchedPath, extract::State, http::Request, response::IntoResponse, routing::get, Router, Extension};
 use std::collections::HashMap;
 
 use std::future::Future;
@@ -105,14 +105,13 @@ const HTTP_REQ_HISTOGRAM_BUCKETS: &[f64] = &[0.005, 0.01, 0.025, 0.05, 0.1, 0.25
 
 impl HttpMetricsLayer {
     pub fn routes<S: Send + Sync + Clone + 'static>(&self) -> Router<S> {
-        let state = Arc::new(self.state.clone());
         Router::new().route(
             "/metrics",
-            get(|state: Extension<Arc<MetricState>>| async { Self::exporter_handler(state) }),
-        ).layer(Extension(state))
+            get(Self::exporter_handler),
+        ).with_state(self.state.clone())
     }
 
-    pub fn exporter_handler(state: Extension<Arc<MetricState>>) -> impl IntoResponse {
+    pub async fn exporter_handler(state: State<MetricState>) -> impl IntoResponse {
         // tracing::trace!("exporter_handler called");
         let mut buffer = Vec::new();
         let encoder = TextEncoder::new();
