@@ -7,11 +7,15 @@ use std::time;
 use axum_otel_metrics::{HttpMetricsLayerBuilder, PathSkipper};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
+use opentelemetry::metrics::{Counter};
+use opentelemetry::{global, Context as OtelContext, KeyValue};
+
 mod sub;
 
 #[derive(Clone)]
 pub struct SharedState {
     pub root_dir: String,
+    foobar: Counter<u64>,
 }
 
 #[tokio::main]
@@ -23,10 +27,6 @@ async fn main() {
         .with(tracing_subscriber::fmt::layer())
         .init();
 
-    let state = SharedState {
-        root_dir: String::from("/tmp"),
-    };
-
     let metrics = HttpMetricsLayerBuilder::new()
         .with_service_name(env!("CARGO_PKG_NAME").to_string())
         .with_service_version(env!("CARGO_PKG_VERSION").to_string())
@@ -34,6 +34,11 @@ async fn main() {
         .with_labels(vec![("env".to_string(), "dev".to_string())].into_iter().collect())
         .with_skipper(PathSkipper::new(|s| s.starts_with("/skip")))
         .build();
+
+    let state = SharedState {
+        root_dir: String::from("/tmp"),
+        foobar: global::meter("axum-app").u64_counter("foobar").init(),
+    };
 
     // build our application with a route
     let app = Router::new()
@@ -69,6 +74,8 @@ async fn handler(state: State<SharedState>, path: MatchedPath) -> Html<String> {
             std::thread::sleep(time::Duration::from_millis(delay_ms))
         }
     }
+
+    state.foobar.add(&OtelContext::current(), 1, &[KeyValue::new("attr1", "foo")]);
 
     Html(format!(
         "<h1>Request path: {}</h1> <hr />\nroot_dir={}\nsleep_ms={}\n\
