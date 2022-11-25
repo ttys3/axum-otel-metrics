@@ -21,8 +21,8 @@ checksum = "d468802bab17cbc0cc575e9b053f41e72aa36bfa6b7f55e3529ffa43161b97fa"
 
 [[package]]
 name = "axum"
-version = "0.6.0-rc.5"
-source = "git+https://github.com/tokio-rs/axum.git?branch=main#0b26411f39fcb58b7ef062c81e52d70a5e6c7b55"
+version = "0.6.0"
+source = "git+https://github.com/tokio-rs/axum.git?branch=main#1b6780cf6cfe28fa24744bb2d9581cd01577c464"
 dependencies = [
  "async-trait",
  "axum-core",
@@ -53,8 +53,8 @@ dependencies = [
 
 [[package]]
 name = "axum-core"
-version = "0.3.0-rc.3"
-source = "git+https://github.com/tokio-rs/axum.git?branch=main#0b26411f39fcb58b7ef062c81e52d70a5e6c7b55"
+version = "0.3.0"
+source = "git+https://github.com/tokio-rs/axum.git?branch=main#1b6780cf6cfe28fa24744bb2d9581cd01577c464"
 dependencies = [
  "async-trait",
  "bytes",
@@ -77,6 +77,7 @@ dependencies = [
  "opentelemetry-prometheus",
  "pin-project-lite",
  "prometheus",
+ "tokio",
  "tower",
 ]
 
@@ -720,7 +721,19 @@ dependencies = [
  "mio",
  "pin-project-lite",
  "socket2",
+ "tokio-macros",
  "winapi",
+]
+
+[[package]]
+name = "tokio-macros"
+version = "1.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9724f9a975fb987ef7a3cd9be0350edcbe130698af5b8f7a631e23d42d052484"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
 ]
 
 [[package]]

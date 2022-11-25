@@ -49,12 +49,11 @@
 //! ```
 
 use axum::http::Response;
-use axum::{extract::MatchedPath, extract::State, http::Request, response::IntoResponse, routing::get, Router, Extension};
+use axum::{extract::MatchedPath, extract::State, http::Request, response::IntoResponse, routing::get, Router};
 use std::collections::HashMap;
 
 use std::future::Future;
 use std::pin::Pin;
-use std::sync::Arc;
 use std::task::Poll::Ready;
 use std::task::{Context, Poll};
 use std::time::Instant;
@@ -105,10 +104,9 @@ const HTTP_REQ_HISTOGRAM_BUCKETS: &[f64] = &[0.005, 0.01, 0.025, 0.05, 0.1, 0.25
 
 impl HttpMetricsLayer {
     pub fn routes<S: Send + Sync + Clone + 'static>(&self) -> Router<S> {
-        Router::new().route(
-            "/metrics",
-            get(Self::exporter_handler),
-        ).with_state(self.state.clone())
+        Router::new()
+            .route("/metrics", get(Self::exporter_handler))
+            .with_state(self.state.clone())
     }
 
     pub async fn exporter_handler(state: State<MetricState>) -> impl IntoResponse {
@@ -319,9 +317,10 @@ where
 
 #[cfg(test)]
 mod tests {
-    use axum::Router;
+    use crate::{HttpMetricsLayerBuilder, HTTP_REQ_HISTOGRAM_BUCKETS};
+    use axum::extract::State;
     use axum::routing::get;
-    use crate::{HTTP_REQ_HISTOGRAM_BUCKETS, HttpMetricsLayerBuilder};
+    use axum::Router;
     use opentelemetry::sdk::export::metrics::aggregation;
     use opentelemetry::sdk::metrics::{controllers, processors, selectors};
     use opentelemetry::{global, Context, KeyValue};
@@ -368,8 +367,7 @@ mod tests {
 
     #[test]
     fn test_builder() {
-        let metrics = HttpMetricsLayerBuilder::new()
-            .build();
+        let metrics = HttpMetricsLayerBuilder::new().build();
         let _app = Router::new()
             // export metrics at `/metrics` endpoint
             .merge(metrics.routes::<()>())
@@ -386,24 +384,21 @@ mod tests {
 
     #[test]
     fn test_builder_with_state_router() {
-
         #[derive(Clone)]
-        struct AppState {
-        }
+        struct AppState {}
 
-        let metrics = HttpMetricsLayerBuilder::new()
-            .build();
-        let _app = Router::new()
+        let metrics = HttpMetricsLayerBuilder::new().build();
+        let _app: Router<AppState> = Router::new()
             // export metrics at `/metrics` endpoint
-            .merge(metrics.routes())
+            // .merge(metrics.routes::<AppState>())
             .route("/", get(handler))
             .route("/hello", get(handler))
             .route("/world", get(handler))
             // add the metrics middleware
             .layer(metrics)
-            .with_state(AppState{});
+            .with_state(AppState {});
 
-        async fn handler() -> &'static str {
+        async fn handler(_state: State<AppState>) -> &'static str {
             "<h1>Hello, World!</h1>"
         }
     }
