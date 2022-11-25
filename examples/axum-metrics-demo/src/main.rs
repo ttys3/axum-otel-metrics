@@ -7,6 +7,8 @@ use std::time;
 use axum_otel_metrics::{HttpMetricsLayerBuilder, PathSkipper};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
+mod sub;
+
 #[derive(Clone)]
 pub struct SharedState {
     pub root_dir: String,
@@ -36,6 +38,7 @@ async fn main() {
     // build our application with a route
     let app = Router::new()
         .merge(metrics.routes::<SharedState>())
+        .nest("/sub", crate::sub::routes())
         .route("/", get(handler))
         .route("/hello", get(handler))
         .route("/world", get(handler))
@@ -72,6 +75,8 @@ async fn handler(state: State<SharedState>, path: MatchedPath) -> Html<String> {
     <hr /><a href='/' style='display: inline-block; width: 100px;'>/</a>\n\
     <a href='/hello' style='display: inline-block; width: 100px;'>/hello</a>\n\
     <a href='/world' style='display: inline-block; width: 100px;'>/world</a>\n\
+    <a href='/sub/sub1' style='display: inline-block; width: 100px;'>/sub/sub1</a>\n\
+    <a href='/sub/sub2' style='display: inline-block; width: 100px;'>/sub/sub2</a>\n\
     <a href='/skip-this' style='display: inline-block; width: 100px;'>/skip-this</a>\n\
     <hr /><a href='/metrics'>/metrics</a>\n\n",
         path.as_str(),
