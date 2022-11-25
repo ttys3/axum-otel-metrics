@@ -8,9 +8,6 @@ homepage = "https://ttys3.dev/"
 repository = "https://github.com/ttys3/axum-otel-metrics/"
 documentation = "https://docs.rs/axum-otel-metrics"
 readme = "README.md"
-exclude = [
-    "grafana-dashboard/*",
-]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [dependencies]
