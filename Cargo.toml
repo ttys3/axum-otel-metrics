@@ -1,6 +1,6 @@
 [package]
 name = "axum-otel-metrics"
-version = "0.1.5"
+version = "0.2.0"
 edition = "2021"
 license = "MIT"
 description = "axum OpenTelemetry metrics middleware with prometheus exporter"
