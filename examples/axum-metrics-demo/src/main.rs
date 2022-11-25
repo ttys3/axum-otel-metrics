@@ -32,7 +32,7 @@ async fn main() {
         .with_service_version(env!("CARGO_PKG_VERSION").to_string())
         .with_prefix("axum_metrics_demo".to_string())
         .with_labels(vec![("env".to_string(), "dev".to_string())].into_iter().collect())
-        .with_skipper(PathSkipper::new(|s: _| s.starts_with("/skip")))
+        .with_skipper(PathSkipper::new(|s| s.starts_with("/skip")))
         .build();
 
     // build our application with a route
