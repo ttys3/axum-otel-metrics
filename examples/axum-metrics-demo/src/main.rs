@@ -4,7 +4,7 @@ use rand::Rng;
 use std::net::SocketAddr;
 use std::time;
 
-use axum_otel_metrics::HttpMetricsLayerBuilder;
+use axum_otel_metrics::{HttpMetricsLayerBuilder, PathSkipper};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[derive(Clone)]
@@ -30,6 +30,7 @@ async fn main() {
         .with_service_version(env!("CARGO_PKG_VERSION").to_string())
         .with_prefix("axum_metrics_demo".to_string())
         .with_labels(vec![("env".to_string(), "dev".to_string())].into_iter().collect())
+        .with_skipper(PathSkipper::new(|s: _| s.starts_with("/skip")))
         .build();
 
     // build our application with a route
@@ -38,6 +39,7 @@ async fn main() {
         .route("/", get(handler))
         .route("/hello", get(handler))
         .route("/world", get(handler))
+        .route("/skip-this", get(handler))
         .layer(metrics)
         .with_state(state.clone());
 
@@ -70,6 +72,7 @@ async fn handler(state: State<SharedState>, path: MatchedPath) -> Html<String> {
     <hr /><a href='/' style='display: inline-block; width: 100px;'>/</a>\n\
     <a href='/hello' style='display: inline-block; width: 100px;'>/hello</a>\n\
     <a href='/world' style='display: inline-block; width: 100px;'>/world</a>\n\
+    <a href='/skip-this' style='display: inline-block; width: 100px;'>/skip-this</a>\n\
     <hr /><a href='/metrics'>/metrics</a>\n\n",
         path.as_str(),
         state.root_dir,

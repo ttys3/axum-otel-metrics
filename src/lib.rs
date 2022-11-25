@@ -87,6 +87,7 @@ pub struct Metric {
 pub struct MetricState {
     exporter: PrometheusExporter,
     pub metric: Metric,
+    skipper: PathSkipper,
 }
 
 #[derive(Clone)]
@@ -119,12 +120,32 @@ impl HttpMetricsLayer {
     }
 }
 
+#[derive(Clone)]
+pub struct PathSkipper {
+    skip: fn(&str) -> bool,
+}
+
+impl PathSkipper {
+    pub fn new(skip: fn(&str) -> bool) -> Self {
+        Self { skip }
+    }
+}
+
+impl Default for PathSkipper {
+    fn default() -> Self {
+        Self {
+            skip: |s| s.starts_with("/metrics"),
+        }
+    }
+}
+
 #[derive(Clone, Default)]
 pub struct HttpMetricsLayerBuilder {
     service_name: Option<String>,
     service_version: Option<String>,
     prefix: Option<String>,
     labels: Option<HashMap<String, String>>,
+    skipper: PathSkipper,
 }
 
 impl HttpMetricsLayerBuilder {
@@ -149,6 +170,11 @@ impl HttpMetricsLayerBuilder {
 
     pub fn with_labels(mut self, labels: HashMap<String, String>) -> Self {
         self.labels = Some(labels);
+        self
+    }
+
+    pub fn with_skipper(mut self, skipper: PathSkipper) -> Self {
+        self.skipper = skipper;
         self
     }
 
@@ -204,6 +230,7 @@ impl HttpMetricsLayerBuilder {
                 http_counter,
                 http_histogram,
             },
+            skipper: self.skipper,
         };
 
         HttpMetricsLayer { state: meter_state }
@@ -276,10 +303,9 @@ where
         let this = self.project();
         let response = ready!(this.inner.poll(cx))?;
 
-        // @TODO add a filter Fn to allow skip specific api, like tokio tracing Filter
-        // if this.path.clone() == "/metrics" {
-        //     return Ready(Ok(response));
-        // }
+        if (this.state.skipper.skip)(this.path.as_str()) {
+            return Poll::Ready(Ok(response));
+        }
 
         let latency = this.start.elapsed().as_secs_f64();
         let status = response.status().as_u16().to_string();
