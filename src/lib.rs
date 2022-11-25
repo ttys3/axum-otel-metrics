@@ -390,7 +390,7 @@ mod tests {
         let metrics = HttpMetricsLayerBuilder::new().build();
         let _app: Router<AppState> = Router::new()
             // export metrics at `/metrics` endpoint
-            // .merge(metrics.routes::<AppState>())
+            .merge(metrics.routes::<AppState>())
             .route("/", get(handler))
             .route("/hello", get(handler))
             .route("/world", get(handler))
