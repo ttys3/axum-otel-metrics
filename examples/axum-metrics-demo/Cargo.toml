@@ -8,7 +8,7 @@ edition = "2021"
 axum-otel-metrics = { path = "../../" }
 #axum = { git = "https://github.com/tokio-rs/axum.git", branch = "main"}
 axum = "0.6.0"
-tokio = { version = "1.22.0", features = ["full", "tracing"] }
+tokio = { version = "1.23.1", features = ["full", "tracing"] }
 tracing = "0.1.37"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 rand = "0.8.5"
