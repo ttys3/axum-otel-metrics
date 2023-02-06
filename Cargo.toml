@@ -18,7 +18,7 @@ opentelemetry = { version = "0.18.0", features = ["metrics", "rt-tokio"] }
 opentelemetry-prometheus = { version = "0.11.0", features = ["prometheus-encoding"] }
 prometheus = "0.13.3"
 tower = "0.4.13"
-futures-util = "0.3.25"
+futures-util = "0.3.26"
 pin-project-lite = "0.2.9"
 
 [dev-dependencies]
