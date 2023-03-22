@@ -217,13 +217,13 @@ impl HttpMetricsLayerBuilder {
         let meter = global::meter("axum-app");
 
         let http_counter = meter
-            .u64_counter("http.counter")
-            .with_description("Counts http request")
+            .u64_counter("requests_total")
+            .with_description("How many HTTP requests processed, partitioned by status code and HTTP method.")
             .init();
 
         let http_histogram = meter
-            .f64_histogram("http.histogram")
-            .with_description("Counts http request latency")
+            .f64_histogram("request_duration_seconds")
+            .with_description("The HTTP request latencies in seconds.")
             .init();
 
         let meter_state = MetricState {

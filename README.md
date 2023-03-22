@@ -8,6 +8,22 @@ axum OpenTelemetry metrics middleware with prometheus exporter
 
 [axum](https://github.com/tokio-rs/axum) is an ergonomic and modular web framework built with Tokio, Tower, and Hyper
 
+be default, the metrics will be exported at `/metrics` endpoint.
+and below metrics will be exported:
+
+request_duration_seconds **histogram**
+```
+request_duration_seconds_bucket
+request_duration_seconds_sum
+request_duration_seconds_count
+```
+
+requests_total **counter**
+
+```
+requests_total
+```
+
 ## Usage
 
 ```rust
