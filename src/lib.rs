@@ -110,6 +110,8 @@ impl HttpMetricsLayer {
             .with_state(self.state.clone())
     }
 
+    // TODO use a static global exporter like autometrics-rs?
+    // https://github.com/autometrics-dev/autometrics-rs/blob/d3e7bffeede43f6c77b6a992b0443c0fca34003f/autometrics/src/prometheus_exporter.rs#L10
     pub async fn exporter_handler(state: State<MetricState>) -> impl IntoResponse {
         // tracing::trace!("exporter_handler called");
         let mut buffer = Vec::new();
