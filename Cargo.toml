@@ -22,4 +22,4 @@ futures-util = "0.3.27"
 pin-project-lite = "0.2.9"
 
 [dev-dependencies]
-tokio = { version = "1.27.0", features = ["macros"] }
+tokio = { version = "1.28.0", features = ["macros"] }
