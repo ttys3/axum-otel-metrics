@@ -200,8 +200,7 @@ impl HttpMetricsLayerBuilder {
             processors::factory(
                 selectors::simple::histogram(HTTP_REQ_HISTOGRAM_BUCKETS),
                 aggregation::cumulative_temporality_selector(),
-            )
-            .with_memory(true),
+            ),
         )
         .with_resource(resource)
         .build();
@@ -358,8 +357,7 @@ mod tests {
             processors::factory(
                 selectors::simple::histogram(HTTP_REQ_HISTOGRAM_BUCKETS),
                 aggregation::cumulative_temporality_selector(),
-            )
-            .with_memory(true),
+            ),
         )
         .build();
 
