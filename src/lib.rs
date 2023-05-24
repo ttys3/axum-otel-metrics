@@ -48,11 +48,11 @@
 //! }
 //! ```
 
-use std::time::Duration;
 use axum::http::Response;
 use axum::{extract::MatchedPath, extract::State, http::Request, response::IntoResponse, routing::get, Router};
 use std::collections::HashMap;
 use std::env;
+use std::time::Duration;
 
 use std::future::Future;
 use std::pin::Pin;
@@ -60,7 +60,7 @@ use std::task::Poll::Ready;
 use std::task::{Context, Poll};
 use std::time::Instant;
 
-use prometheus::{Encoder, TextEncoder, Registry};
+use prometheus::{Encoder, Registry, TextEncoder};
 
 use opentelemetry::{Key, KeyValue, Value};
 
@@ -69,10 +69,8 @@ use opentelemetry::metrics::{Counter, Histogram};
 use opentelemetry::metrics::{MeterProvider as _, Unit};
 
 use opentelemetry::sdk::metrics::{new_view, Aggregation, Instrument, MeterProvider, Stream};
-use opentelemetry::sdk::resource::{
-    EnvResourceDetector, SdkProvidedResourceDetector, TelemetryResourceDetector,
-};
-use opentelemetry_semantic_conventions::resource::{SERVICE_NAME, SERVICE_VERSION, SERVICE_NAMESPACE};
+use opentelemetry::sdk::resource::{EnvResourceDetector, SdkProvidedResourceDetector, TelemetryResourceDetector};
+use opentelemetry_semantic_conventions::resource::{SERVICE_NAME, SERVICE_NAMESPACE, SERVICE_VERSION};
 
 use opentelemetry::{global, Context as OtelContext};
 
@@ -118,22 +116,23 @@ pub struct HttpMetricsLayer {
 const HTTP_REQ_DURATION_HISTOGRAM_BUCKETS: &[f64] = &[0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0];
 
 // write .005 * 1000, .01 * 1000, .025 * 1000, .05 * 1000, .1 * 1000, .25 * 1000, .5 * 1000, 1 * 1000, 2.5 * 1000, 5 * 1000, 10 * 1000
-const HTTP_REQ_DURATION_MS_HISTOGRAM_BUCKETS:  &[f64] = &[5.0, 10.0, 25.0, 50.0, 100.0, 250.0, 500.0, 1000.0, 2500.0, 5000.0, 10000.0];
+const HTTP_REQ_DURATION_MS_HISTOGRAM_BUCKETS: &[f64] =
+    &[5.0, 10.0, 25.0, 50.0, 100.0, 250.0, 500.0, 1000.0, 2500.0, 5000.0, 10000.0];
 
 const KB: f64 = 1024.0;
 const MB: f64 = 1024.0 * KB;
 
-const HTTP_REQ_SIZE_HISTOGRAM_BUCKETS:  &[f64] = &[
-    1.0 * KB,  // 1 KB
-    2.0 * KB,  // 2 KB
-    5.0 * KB,  // 5 KB
-    10.0 * KB, // 10 KB
+const HTTP_REQ_SIZE_HISTOGRAM_BUCKETS: &[f64] = &[
+    1.0 * KB,   // 1 KB
+    2.0 * KB,   // 2 KB
+    5.0 * KB,   // 5 KB
+    10.0 * KB,  // 10 KB
     100.0 * KB, // 100 KB
     500.0 * KB, // 500 KB
-    1.0 * MB, // 1 MB
-    2.5 * MB, // 2 MB
-    5.0 * MB, // 5 MB
-    10.0 * MB, // 10 MB
+    1.0 * MB,   // 1 MB
+    2.5 * MB,   // 2 MB
+    5.0 * MB,   // 5 MB
+    10.0 * MB,  // 10 MB
 ];
 
 impl HttpMetricsLayer {
@@ -169,10 +168,7 @@ impl PathSkipper {
 impl Default for PathSkipper {
     fn default() -> Self {
         Self {
-            skip: |s| {
-                s.starts_with("/metrics")
-                || s.starts_with("/favicon.ico")
-            },
+            skip: |s| s.starts_with("/metrics") || s.starts_with("/favicon.ico"),
         }
     }
 }
@@ -231,7 +227,7 @@ impl HttpMetricsLayerBuilder {
 
         if let Some(service_name) = self.service_name {
             // `foo.ns`
-            if !ns.is_empty() && !service_name.starts_with(format!("{}.", &ns).as_str()){
+            if !ns.is_empty() && !service_name.starts_with(format!("{}.", &ns).as_str()) {
                 resource.push(SERVICE_NAME.string(format!("{}.{}", service_name, &ns)));
             } else {
                 resource.push(SERVICE_NAME.string(service_name));
@@ -265,7 +261,10 @@ impl HttpMetricsLayerBuilder {
             Registry::new()
         };
         // init prometheus exporter
-        let exporter = opentelemetry_prometheus::exporter().with_registry(registry.clone()).build().unwrap();
+        let exporter = opentelemetry_prometheus::exporter()
+            .with_registry(registry.clone())
+            .build()
+            .unwrap();
 
         let provider = MeterProvider::builder()
             .with_resource(res)
@@ -278,7 +277,7 @@ impl HttpMetricsLayerBuilder {
                         record_min_max: true,
                     }),
                 )
-                    .unwrap(),
+                .unwrap(),
             )
             .with_view(
                 new_view(
@@ -288,7 +287,7 @@ impl HttpMetricsLayerBuilder {
                         record_min_max: true,
                     }),
                 )
-                    .unwrap(),
+                .unwrap(),
             )
             .with_view(
                 new_view(
@@ -298,9 +297,9 @@ impl HttpMetricsLayerBuilder {
                         record_min_max: true,
                     }),
                 )
-                    .unwrap(),
+                .unwrap(),
             )
-        .build();
+            .build();
 
         // init the global meter provider
         global::set_meter_provider(provider.clone());
@@ -412,10 +411,13 @@ fn compute_approximate_request_size<T>(req: &Request<T>) -> usize {
 
     s += req.uri().host().map(|h| h.len()).unwrap_or(0);
 
-    s += req.headers().get(http::header::CONTENT_LENGTH).map(|v| v.to_str().unwrap().parse::<usize>().unwrap_or(0)).unwrap_or(0);
+    s += req
+        .headers()
+        .get(http::header::CONTENT_LENGTH)
+        .map(|v| v.to_str().unwrap().parse::<usize>().unwrap_or(0))
+        .unwrap_or(0);
     s
 }
-
 
 impl<F, B, E> Future for ResponseFuture<F>
 where
@@ -465,13 +467,13 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::{HttpMetricsLayerBuilder};
+    use crate::HttpMetricsLayerBuilder;
     use axum::extract::State;
     use axum::routing::get;
     use axum::Router;
-    use opentelemetry::{global, Context, KeyValue};
-    use prometheus::{Encoder, TextEncoder, Registry};
     use opentelemetry::sdk::metrics::MeterProvider;
+    use opentelemetry::{global, Context, KeyValue};
+    use prometheus::{Encoder, Registry, TextEncoder};
 
     #[test]
     fn test_prometheus_exporter() {
@@ -480,11 +482,12 @@ mod tests {
         let registry = Registry::new();
 
         // init prometheus exporter
-        let exporter = opentelemetry_prometheus::exporter().with_registry(registry.clone()).build().unwrap();
+        let exporter = opentelemetry_prometheus::exporter()
+            .with_registry(registry.clone())
+            .build()
+            .unwrap();
 
-        let provider = MeterProvider::builder()
-            .with_reader(exporter)
-            .build();
+        let provider = MeterProvider::builder().with_reader(exporter).build();
 
         // init the global meter provider
         global::set_meter_provider(provider.clone());
