@@ -24,6 +24,14 @@ requests_total **counter**
 requests_total
 ```
 
+labels for `request_duration_seconds` and `requests_total`:
+
+```
+method
+path
+status
+```
+
 ## Usage
 
 ```rust
