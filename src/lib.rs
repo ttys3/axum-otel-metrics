@@ -48,6 +48,7 @@
 //! }
 //! ```
 
+use std::time::Duration;
 use axum::http::Response;
 use axum::{extract::MatchedPath, extract::State, http::Request, response::IntoResponse, routing::get, Router};
 use std::collections::HashMap;
@@ -60,13 +61,22 @@ use std::time::Instant;
 
 use opentelemetry_prometheus::PrometheusExporter;
 
-use prometheus::{Encoder, TextEncoder};
+use prometheus::{Encoder, TextEncoder, Registry};
 
 use opentelemetry::{Key, KeyValue, Value};
 
 use opentelemetry::metrics::{Counter, Histogram};
-use opentelemetry::sdk::export::metrics::aggregation;
-use opentelemetry::sdk::metrics::{controllers, processors, selectors};
+
+use opentelemetry::metrics::{Meter, MeterProvider as _, Unit};
+
+use opentelemetry_prometheus::ExporterBuilder;
+use opentelemetry::sdk::metrics::{new_view, Aggregation, Instrument, MeterProvider, Stream};
+use opentelemetry::sdk::resource::{
+    EnvResourceDetector, SdkProvidedResourceDetector, TelemetryResourceDetector,
+};
+use opentelemetry_semantic_conventions::resource::{SERVICE_NAME, TELEMETRY_SDK_VERSION};
+
+
 use opentelemetry::{global, Context as OtelContext};
 
 use tower::{Layer, Service};
@@ -77,15 +87,17 @@ use pin_project_lite::pin_project;
 
 #[derive(Clone)]
 pub struct Metric {
-    pub http_counter: Counter<u64>,
+    pub requests_total: Counter<u64>,
 
     // before opentelemetry 0.18.0, Histogram called ValueRecorder
-    pub http_histogram: Histogram<f64>,
+    pub req_duration: Histogram<f64>,
+
+    pub req_size: Histogram<u64>,
 }
 
 #[derive(Clone)]
 pub struct MetricState {
-    exporter: PrometheusExporter,
+    registry: prometheus::Registry,
     pub metric: Metric,
     skipper: PathSkipper,
 }
@@ -102,7 +114,27 @@ pub struct HttpMetricsLayer {
 }
 
 // TODO support custom buckets
-const HTTP_REQ_HISTOGRAM_BUCKETS: &[f64] = &[0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0];
+// allocation not allowed in statics: static HTTP_REQ_DURATION_HISTOGRAM_BUCKETS: Vec<f64> = vec![0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0];
+const HTTP_REQ_DURATION_HISTOGRAM_BUCKETS: &[f64] = &[0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0];
+
+// write .005 * 1000, .01 * 1000, .025 * 1000, .05 * 1000, .1 * 1000, .25 * 1000, .5 * 1000, 1 * 1000, 2.5 * 1000, 5 * 1000, 10 * 1000
+const HTTP_REQ_DURATION_MS_HISTOGRAM_BUCKETS:  &[f64] = &[5.0, 10.0, 25.0, 50.0, 100.0, 250.0, 500.0, 1000.0, 2500.0, 5000.0, 10000.0];
+
+const KB: f64 = 1024.0;
+const MB: f64 = 1024.0 * KB;
+
+const HTTP_REQ_SIZE_HISTOGRAM_BUCKETS:  &[f64] = &[
+    1.0 * KB,  // 1 KB
+    2.0 * KB,  // 2 KB
+    5.0 * KB,  // 5 KB
+    10.0 * KB, // 10 KB
+    100.0 * KB, // 100 KB
+    500.0 * KB, // 500 KB
+    1.0 * MB, // 1 MB
+    2.5 * MB, // 2 MB
+    5.0 * MB, // 5 MB
+    10.0 * MB, // 10 MB
+];
 
 impl HttpMetricsLayer {
     pub fn routes<S>(&self) -> Router<S> {
@@ -117,7 +149,7 @@ impl HttpMetricsLayer {
         // tracing::trace!("exporter_handler called");
         let mut buffer = Vec::new();
         let encoder = TextEncoder::new();
-        encoder.encode(&state.exporter.registry().gather(), &mut buffer).unwrap();
+        encoder.encode(&state.registry.gather(), &mut buffer).unwrap();
         // return metrics
         String::from_utf8(buffer).unwrap()
     }
@@ -137,7 +169,10 @@ impl PathSkipper {
 impl Default for PathSkipper {
     fn default() -> Self {
         Self {
-            skip: |s| s.starts_with("/metrics"),
+            skip: |s| {
+                s.starts_with("/metrics")
+                || s.starts_with("/favicon.ico")
+            },
         }
     }
 }
@@ -190,47 +225,96 @@ impl HttpMetricsLayerBuilder {
             resource.push(KeyValue::new("service.version", service_version));
         }
 
-        let resource = if resource.is_empty() {
-            Resource::empty()
+        let res = if resource.is_empty() {
+            Resource::from_detectors(
+                Duration::from_secs(6),
+                vec![
+                    Box::new(SdkProvidedResourceDetector),
+                    Box::new(EnvResourceDetector::new()),
+                    Box::new(TelemetryResourceDetector),
+                ],
+            )
         } else {
-            Resource::new(resource)
+            Resource::from_detectors(
+                Duration::from_secs(6),
+                vec![
+                    Box::new(SdkProvidedResourceDetector),
+                    Box::new(EnvResourceDetector::new()),
+                    Box::new(TelemetryResourceDetector),
+                ],
+            ).merge(&mut Resource::new(resource))
         };
-
-        let controller = controllers::basic(
-            processors::factory(
-                selectors::simple::histogram(HTTP_REQ_HISTOGRAM_BUCKETS),
-                aggregation::cumulative_temporality_selector(),
-            ),
-        )
-        .with_resource(resource)
-        .build();
 
         let registry = if let Some(prefix) = self.prefix {
             prometheus::Registry::new_custom(Some(prefix), self.labels).expect("create prometheus registry")
         } else {
             prometheus::Registry::new()
         };
-
         // init global meter provider and prometheus exporter
-        let exporter = opentelemetry_prometheus::exporter(controller).with_registry(registry).init();
-        // this must called after the global meter provider has ben initialized
-        let meter = global::meter("axum-app");
+        let exporter = opentelemetry_prometheus::exporter().with_registry(registry.clone()).build().unwrap();
 
-        let http_counter = meter
+        let provider = MeterProvider::builder()
+            .with_resource(res)
+            .with_reader(exporter)
+            .with_view(
+                new_view(
+                    Instrument::new().name("*_duration_milliseconds"),
+                    Stream::new().aggregation(Aggregation::ExplicitBucketHistogram {
+                        boundaries: HTTP_REQ_DURATION_MS_HISTOGRAM_BUCKETS.to_vec(),
+                        record_min_max: true,
+                    }),
+                )
+                    .unwrap(),
+            )
+            .with_view(
+                new_view(
+                    Instrument::new().name("*_duration_seconds"),
+                    Stream::new().aggregation(Aggregation::ExplicitBucketHistogram {
+                        boundaries: HTTP_REQ_DURATION_HISTOGRAM_BUCKETS.to_vec(),
+                        record_min_max: true,
+                    }),
+                )
+                    .unwrap(),
+            )
+            .with_view(
+                new_view(
+                    Instrument::new().name("*request_size_bytes"),
+                    Stream::new().aggregation(Aggregation::ExplicitBucketHistogram {
+                        boundaries: HTTP_REQ_SIZE_HISTOGRAM_BUCKETS.to_vec(),
+                        record_min_max: true,
+                    }),
+                )
+                    .unwrap(),
+            )
+        .build();
+
+        // init the global meter provider
+        global::set_meter_provider(provider.clone());
+        // this must called after the global meter provider has ben initialized
+        // let meter = global::meter("axum-app");
+        let meter = provider.meter("axum-app");
+
+        let requests_total = meter
             .u64_counter("requests_total")
             .with_description("How many HTTP requests processed, partitioned by status code and HTTP method.")
             .init();
 
-        let http_histogram = meter
+        let req_duration = meter
             .f64_histogram("request_duration_seconds")
             .with_description("The HTTP request latencies in seconds.")
             .init();
 
+        let req_size = meter
+            .u64_histogram("request_size_bytes")
+            .with_description("The HTTP request sizes in bytes.")
+            .init();
+
         let meter_state = MetricState {
-            exporter,
+            registry,
             metric: Metric {
-                http_counter,
-                http_histogram,
+                requests_total: requests_total,
+                req_duration: req_duration,
+                req_size: req_size,
             },
             skipper: self.skipper,
         };
@@ -259,6 +343,7 @@ pin_project! {
         state: MetricState,
         path: String,
         method: String,
+        req_size: u64,
     }
 }
 
@@ -285,15 +370,35 @@ where
             req.uri().path().to_owned()
         };
 
+        let req_size = compute_approximate_request_size(&req);
+
         ResponseFuture {
             inner: self.service.call(req),
             start,
             method,
             path,
+            req_size: req_size as u64,
             state: self.state.clone(),
         }
     }
 }
+
+fn compute_approximate_request_size<T>(req: &Request<T>) -> usize {
+    let mut s = 0;
+    s += req.uri().path().len();
+    s += req.method().as_str().len();
+
+    req.headers().iter().for_each(|(k, v)| {
+        s += k.as_str().len();
+        s += v.as_bytes().len();
+    });
+
+    s += req.uri().host().map(|h| h.len()).unwrap_or(0);
+
+    s += req.headers().get(http::header::CONTENT_LENGTH).map(|v| v.to_str().unwrap().parse::<usize>().unwrap_or(0)).unwrap_or(0);
+    s
+}
+
 
 impl<F, B, E> Future for ResponseFuture<F>
 where
@@ -323,9 +428,11 @@ where
 
         let cx = OtelContext::current();
 
-        this.state.metric.http_counter.add(&cx, 1, &labels);
+        this.state.metric.requests_total.add(&cx, 1, &labels);
 
-        this.state.metric.http_histogram.record(&cx, latency, &labels);
+        this.state.metric.req_size.record(&cx, *this.req_size, &labels);
+
+        this.state.metric.req_duration.record(&cx, latency, &labels);
 
         // tracing::trace!(
         //     "record metrics, method={} latency={} status={} labels={:?}",
@@ -341,12 +448,10 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::{HttpMetricsLayerBuilder, HTTP_REQ_HISTOGRAM_BUCKETS};
+    use crate::{HttpMetricsLayerBuilder, HTTP_REQ_DURATION_HISTOGRAM_BUCKETS};
     use axum::extract::State;
     use axum::routing::get;
     use axum::Router;
-    use opentelemetry::sdk::export::metrics::aggregation;
-    use opentelemetry::sdk::metrics::{controllers, processors, selectors};
     use opentelemetry::{global, Context, KeyValue};
     use opentelemetry_prometheus::PrometheusExporter;
     use prometheus::{Encoder, TextEncoder};
@@ -355,7 +460,7 @@ mod tests {
     fn init_meter() -> PrometheusExporter {
         let controller = controllers::basic(
             processors::factory(
-                selectors::simple::histogram(HTTP_REQ_HISTOGRAM_BUCKETS),
+                selectors::simple::histogram(HTTP_REQ_DURATION_HISTOGRAM_BUCKETS),
                 aggregation::cumulative_temporality_selector(),
             ),
         )

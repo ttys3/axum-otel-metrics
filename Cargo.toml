@@ -14,12 +14,18 @@ exclude = [".github/*", "examples/*", "tests/*"]
 [dependencies]
 #axum = { git = "https://github.com/tokio-rs/axum.git", branch = "main"}
 axum = "0.6.12"
-opentelemetry = { version = "0.19.0", features = ["metrics", "rt-tokio"] }
-opentelemetry-prometheus = { version = "0.12.0", features = ["prometheus-encoding"] }
+#opentelemetry = { version = "0.19.0", features = ["metrics", "rt-tokio"] }
+#opentelemetry-prometheus = { version = "0.12.0", features = ["prometheus-encoding"] }
+opentelemetry = { git = "https://github.com/open-telemetry/opentelemetry-rust.git", branch = "main", features = ["metrics", "rt-tokio"]}
+opentelemetry-prometheus = { git = "https://github.com/open-telemetry/opentelemetry-rust.git", branch = "main", features = ["prometheus-encoding"] }
+opentelemetry-semantic-conventions = { git = "https://github.com/open-telemetry/opentelemetry-rust.git", branch = "main"}
+
 prometheus = "0.13.3"
 tower = "0.4.13"
-futures-util = "0.3.27"
+futures-util = "0.3.28"
 pin-project-lite = "0.2.9"
+http = "0.2.9"
+
 
 [dev-dependencies]
-tokio = { version = "1.27.0", features = ["macros"] }
+tokio = { version = "1.28.1", features = ["macros"] }
