@@ -372,7 +372,7 @@ where
         let path = if let Some(matched_path) = req.extensions().get::<MatchedPath>() {
             matched_path.as_str().to_owned()
         } else {
-            req.uri().path().to_owned()
+            "".to_owned()
         };
 
         let req_size = compute_approximate_request_size(&req);
