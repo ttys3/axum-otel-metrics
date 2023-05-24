@@ -1,10 +1,11 @@
 use axum::extract::{MatchedPath, State};
-use axum::{response::Html, routing::get, Router};
+use axum::{response::Html, routing::{get, post}, Router};
 use rand::Rng;
 use std::net::SocketAddr;
 use std::time;
 
 use axum_otel_metrics::{HttpMetricsLayerBuilder, PathSkipper};
+use axum::response::Response;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use opentelemetry::metrics::{Counter};
@@ -40,6 +41,7 @@ async fn main() {
         foobar: global::meter("axum-app").u64_counter("foobar").init(),
     };
 
+
     // build our application with a route
     let app = Router::new()
         .merge(metrics.routes::<SharedState>())
@@ -48,13 +50,23 @@ async fn main() {
         .route("/hello", get(handler))
         .route("/world", get(handler))
         .route("/skip-this", get(handler))
+        .route("/post", post(handler))
         .layer(metrics)
+        .layer(axum::middleware::map_response(set_header))
+        .fallback(||{
+            async { Html("404 page not found".to_string()) }
+        })
         .with_state(state.clone());
 
     // run it
     let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
     println!("listening on http://{}", addr);
     axum::Server::bind(&addr).serve(app.into_make_service()).await.unwrap();
+}
+
+async fn set_header<B>(mut response: Response<B>) -> Response<B> {
+    response.headers_mut().insert("x-test-key", "foo".parse().unwrap());
+    response
 }
 
 async fn handler(state: State<SharedState>, path: MatchedPath) -> Html<String> {
