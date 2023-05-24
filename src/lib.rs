@@ -278,7 +278,7 @@ impl HttpMetricsLayerBuilder {
             )
             .with_view(
                 new_view(
-                    Instrument::new().name("*request_size_bytes"),
+                    Instrument::new().name("*request_size"),
                     Stream::new().aggregation(Aggregation::ExplicitBucketHistogram {
                         boundaries: HTTP_REQ_SIZE_HISTOGRAM_BUCKETS.to_vec(),
                         record_min_max: true,
@@ -294,18 +294,23 @@ impl HttpMetricsLayerBuilder {
         // let meter = global::meter("axum-app");
         let meter = provider.meter("axum-app");
 
+        // requests_total
         let requests_total = meter
-            .u64_counter("requests_total")
+            .u64_counter("requests")
             .with_description("How many HTTP requests processed, partitioned by status code and HTTP method.")
             .init();
 
+        // request_duration_seconds
         let req_duration = meter
             .f64_histogram("request_duration_seconds")
+            .with_unit(Unit::new("s"))
             .with_description("The HTTP request latencies in seconds.")
             .init();
 
+        // request_size_bytes
         let req_size = meter
-            .u64_histogram("request_size_bytes")
+            .u64_histogram("request_size")
+            .with_unit(Unit::new("By"))
             .with_description("The HTTP request sizes in bytes.")
             .init();
 
