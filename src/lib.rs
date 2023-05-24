@@ -52,6 +52,7 @@ use std::time::Duration;
 use axum::http::Response;
 use axum::{extract::MatchedPath, extract::State, http::Request, response::IntoResponse, routing::get, Router};
 use std::collections::HashMap;
+use std::env;
 
 use std::future::Future;
 use std::pin::Pin;
@@ -59,23 +60,19 @@ use std::task::Poll::Ready;
 use std::task::{Context, Poll};
 use std::time::Instant;
 
-use opentelemetry_prometheus::PrometheusExporter;
-
 use prometheus::{Encoder, TextEncoder, Registry};
 
 use opentelemetry::{Key, KeyValue, Value};
 
 use opentelemetry::metrics::{Counter, Histogram};
 
-use opentelemetry::metrics::{Meter, MeterProvider as _, Unit};
+use opentelemetry::metrics::{MeterProvider as _, Unit};
 
-use opentelemetry_prometheus::ExporterBuilder;
 use opentelemetry::sdk::metrics::{new_view, Aggregation, Instrument, MeterProvider, Stream};
 use opentelemetry::sdk::resource::{
     EnvResourceDetector, SdkProvidedResourceDetector, TelemetryResourceDetector,
 };
-use opentelemetry_semantic_conventions::resource::{SERVICE_NAME, TELEMETRY_SDK_VERSION};
-
+use opentelemetry_semantic_conventions::resource::{SERVICE_NAME, SERVICE_VERSION, SERVICE_NAMESPACE};
 
 use opentelemetry::{global, Context as OtelContext};
 
@@ -84,6 +81,9 @@ use tower::{Layer, Service};
 use futures_util::ready;
 use opentelemetry::sdk::Resource;
 use pin_project_lite::pin_project;
+
+// service.instance used by Tencent Cloud TKE APM only, for view application metrics by pod IP
+const SERVICE_INSTANCE: Key = Key::from_static_str("service.instance");
 
 #[derive(Clone)]
 pub struct Metric {
@@ -97,7 +97,7 @@ pub struct Metric {
 
 #[derive(Clone)]
 pub struct MetricState {
-    registry: prometheus::Registry,
+    registry: Registry,
     pub metric: Metric,
     skipper: PathSkipper,
 }
@@ -218,39 +218,53 @@ impl HttpMetricsLayerBuilder {
 
     pub fn build(self) -> HttpMetricsLayer {
         let mut resource = vec![];
-        if let Some(service_name) = self.service_name {
-            resource.push(KeyValue::new("service.name", service_name));
-        }
-        if let Some(service_version) = self.service_version {
-            resource.push(KeyValue::new("service.version", service_version));
+
+        let ns = env::var("INSTANCE_NAMESPACE").unwrap_or_default();
+        if !ns.is_empty() {
+            resource.push(SERVICE_NAMESPACE.string(ns.clone()));
         }
 
-        let res = if resource.is_empty() {
-            Resource::from_detectors(
-                Duration::from_secs(6),
-                vec![
-                    Box::new(SdkProvidedResourceDetector),
-                    Box::new(EnvResourceDetector::new()),
-                    Box::new(TelemetryResourceDetector),
-                ],
-            )
+        let instance_ip = env::var("INSTANCE_IP").unwrap_or_default();
+        if !instance_ip.is_empty() {
+            resource.push(SERVICE_INSTANCE.string(instance_ip));
+        }
+
+        if let Some(service_name) = self.service_name {
+            // `foo.ns`
+            if !ns.is_empty() && !service_name.starts_with(format!("{}.", &ns).as_str()){
+                resource.push(SERVICE_NAME.string(format!("{}.{}", service_name, &ns)));
+            } else {
+                resource.push(SERVICE_NAME.string(service_name));
+            }
+        }
+        if let Some(service_version) = self.service_version {
+            resource.push(SERVICE_VERSION.string(service_version));
+        }
+
+        let res = Resource::from_detectors(
+            Duration::from_secs(6),
+            vec![
+                // set service.name from env OTEL_SERVICE_NAME > env OTEL_RESOURCE_ATTRIBUTES > option_env! CARGO_BIN_NAME > unknown_service
+                Box::new(SdkProvidedResourceDetector),
+                // detect res from env OTEL_RESOURCE_ATTRIBUTES (resources string like key1=value1,key2=value2,...)
+                Box::new(EnvResourceDetector::new()),
+                // set telemetry.sdk.{name, language, version}
+                Box::new(TelemetryResourceDetector),
+            ],
+        );
+
+        let res = if !resource.is_empty() {
+            res.merge(&mut Resource::new(resource))
         } else {
-            Resource::from_detectors(
-                Duration::from_secs(6),
-                vec![
-                    Box::new(SdkProvidedResourceDetector),
-                    Box::new(EnvResourceDetector::new()),
-                    Box::new(TelemetryResourceDetector),
-                ],
-            ).merge(&mut Resource::new(resource))
+            res
         };
 
         let registry = if let Some(prefix) = self.prefix {
-            prometheus::Registry::new_custom(Some(prefix), self.labels).expect("create prometheus registry")
+            Registry::new_custom(Some(prefix), self.labels).expect("create prometheus registry")
         } else {
-            prometheus::Registry::new()
+            Registry::new()
         };
-        // init global meter provider and prometheus exporter
+        // init prometheus exporter
         let exporter = opentelemetry_prometheus::exporter().with_registry(registry.clone()).build().unwrap();
 
         let provider = MeterProvider::builder()
@@ -365,8 +379,6 @@ where
     }
 
     fn call(&mut self, req: Request<R>) -> Self::Future {
-        // axum::middleware::from_fn_with_state(self.state.clone(), track_metrics)
-
         let start = Instant::now();
         let method = req.method().clone().to_string();
         let path = if let Some(matched_path) = req.extensions().get::<MatchedPath>() {
@@ -453,34 +465,30 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::{HttpMetricsLayerBuilder, HTTP_REQ_DURATION_HISTOGRAM_BUCKETS};
+    use crate::{HttpMetricsLayerBuilder};
     use axum::extract::State;
     use axum::routing::get;
     use axum::Router;
     use opentelemetry::{global, Context, KeyValue};
-    use opentelemetry_prometheus::PrometheusExporter;
-    use prometheus::{Encoder, TextEncoder};
-
-    // init global meter provider and prometheus exporter
-    fn init_meter() -> PrometheusExporter {
-        let controller = controllers::basic(
-            processors::factory(
-                selectors::simple::histogram(HTTP_REQ_DURATION_HISTOGRAM_BUCKETS),
-                aggregation::cumulative_temporality_selector(),
-            ),
-        )
-        .build();
-
-        // this will setup the global meter provider
-        opentelemetry_prometheus::exporter(controller)
-            .with_registry(prometheus::Registry::new_custom(Some("axum_app".into()), None).expect("create prometheus registry"))
-            .init()
-    }
+    use prometheus::{Encoder, TextEncoder, Registry};
+    use opentelemetry::sdk::metrics::MeterProvider;
 
     #[test]
     fn test_prometheus_exporter() {
         let cx = Context::current();
-        let exporter = init_meter();
+
+        let registry = Registry::new();
+
+        // init prometheus exporter
+        let exporter = opentelemetry_prometheus::exporter().with_registry(registry.clone()).build().unwrap();
+
+        let provider = MeterProvider::builder()
+            .with_reader(exporter)
+            .build();
+
+        // init the global meter provider
+        global::set_meter_provider(provider.clone());
+
         let meter = global::meter("my-app");
 
         // Use two instruments
@@ -492,7 +500,7 @@ mod tests {
 
         // Encode data as text or protobuf
         let encoder = TextEncoder::new();
-        let metric_families = exporter.registry().gather();
+        let metric_families = registry.gather();
         let mut result = Vec::new();
         encoder.encode(&metric_families, &mut result).expect("encode failed");
         println!("{}", String::from_utf8(result).unwrap());
