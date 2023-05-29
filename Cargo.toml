@@ -28,4 +28,4 @@ http = "0.2.9"
 
 
 [dev-dependencies]
-tokio = { version = "1.28.1", features = ["macros"] }
+tokio = { version = "1.28.2", features = ["macros"] }
