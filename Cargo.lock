@@ -393,7 +393,7 @@ checksum = "b7e5500299e16ebb147ae15a00a942af264cf3688f47923b8fc2cd5858f23ad3"
 [[package]]
 name = "opentelemetry"
 version = "0.19.0"
-source = "git+https://github.com/open-telemetry/opentelemetry-rust.git?branch=main#00641fb01de4411bbac77f161f5d7b2baec69f00"
+source = "git+https://github.com/open-telemetry/opentelemetry-rust.git?branch=main#71a64d77d1710539f599b6281e0d7546c60428dc"
 dependencies = [
  "opentelemetry_api",
  "opentelemetry_sdk",
@@ -402,7 +402,7 @@ dependencies = [
 [[package]]
 name = "opentelemetry-prometheus"
 version = "0.12.0"
-source = "git+https://github.com/open-telemetry/opentelemetry-rust.git?branch=main#00641fb01de4411bbac77f161f5d7b2baec69f00"
+source = "git+https://github.com/open-telemetry/opentelemetry-rust.git?branch=main#71a64d77d1710539f599b6281e0d7546c60428dc"
 dependencies = [
  "once_cell",
  "opentelemetry_api",
@@ -414,7 +414,7 @@ dependencies = [
 [[package]]
 name = "opentelemetry-semantic-conventions"
 version = "0.11.0"
-source = "git+https://github.com/open-telemetry/opentelemetry-rust.git?branch=main#00641fb01de4411bbac77f161f5d7b2baec69f00"
+source = "git+https://github.com/open-telemetry/opentelemetry-rust.git?branch=main#71a64d77d1710539f599b6281e0d7546c60428dc"
 dependencies = [
  "opentelemetry",
 ]
@@ -422,7 +422,7 @@ dependencies = [
 [[package]]
 name = "opentelemetry_api"
 version = "0.19.0"
-source = "git+https://github.com/open-telemetry/opentelemetry-rust.git?branch=main#00641fb01de4411bbac77f161f5d7b2baec69f00"
+source = "git+https://github.com/open-telemetry/opentelemetry-rust.git?branch=main#71a64d77d1710539f599b6281e0d7546c60428dc"
 dependencies = [
  "futures-channel",
  "futures-util",
@@ -437,7 +437,7 @@ dependencies = [
 [[package]]
 name = "opentelemetry_sdk"
 version = "0.19.0"
-source = "git+https://github.com/open-telemetry/opentelemetry-rust.git?branch=main#00641fb01de4411bbac77f161f5d7b2baec69f00"
+source = "git+https://github.com/open-telemetry/opentelemetry-rust.git?branch=main#71a64d77d1710539f599b6281e0d7546c60428dc"
 dependencies = [
  "async-trait",
  "crossbeam-channel",
