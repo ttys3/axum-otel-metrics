@@ -23,7 +23,7 @@ opentelemetry-semantic-conventions = { git = "https://github.com/open-telemetry/
 prometheus = "0.13.3"
 tower = "0.4.13"
 futures-util = "0.3.28"
-pin-project-lite = "0.2.9"
+pin-project-lite = "0.2.10"
 http = "0.2.9"
 
 
