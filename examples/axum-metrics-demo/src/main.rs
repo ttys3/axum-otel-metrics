@@ -9,7 +9,7 @@ use axum::response::Response;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use opentelemetry::metrics::{Counter};
-use opentelemetry::{global, Context as OtelContext, KeyValue};
+use opentelemetry::{global, KeyValue};
 
 mod sub;
 
@@ -87,7 +87,7 @@ async fn handler(state: State<SharedState>, path: MatchedPath) -> Html<String> {
         }
     }
 
-    state.foobar.add(&OtelContext::current(), 1, &[KeyValue::new("attr1", "foo")]);
+    state.foobar.add(1, &[KeyValue::new("attr1", "foo")]);
 
     Html(format!(
         "<h1>Request path: {}</h1> <hr />\nroot_dir={}\nsleep_ms={}\n\

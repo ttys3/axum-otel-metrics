@@ -72,7 +72,7 @@ use opentelemetry::sdk::metrics::{new_view, Aggregation, Instrument, MeterProvid
 use opentelemetry::sdk::resource::{EnvResourceDetector, SdkProvidedResourceDetector, TelemetryResourceDetector};
 use opentelemetry_semantic_conventions::resource::{SERVICE_NAME, SERVICE_NAMESPACE, SERVICE_VERSION};
 
-use opentelemetry::{global, Context as OtelContext};
+use opentelemetry::global;
 
 use tower::{Layer, Service};
 
@@ -445,13 +445,11 @@ where
             KeyValue::new("status", status),
         ];
 
-        let cx = OtelContext::current();
+        this.state.metric.requests_total.add(1, &labels);
 
-        this.state.metric.requests_total.add(&cx, 1, &labels);
+        this.state.metric.req_size.record(*this.req_size, &labels);
 
-        this.state.metric.req_size.record(&cx, *this.req_size, &labels);
-
-        this.state.metric.req_duration.record(&cx, latency, &labels);
+        this.state.metric.req_duration.record(latency, &labels);
 
         // tracing::trace!(
         //     "record metrics, method={} latency={} status={} labels={:?}",
@@ -498,8 +496,8 @@ mod tests {
         let counter = meter.u64_counter("a.counter").with_description("Counts things").init();
         let recorder = meter.i64_histogram("a.histogram").with_description("Records values").init();
 
-        counter.add(&cx, 100, &[KeyValue::new("key", "value")]);
-        recorder.record(&cx, 100, &[KeyValue::new("key", "value")]);
+        counter.add( 100, &[KeyValue::new("key", "value")]);
+        recorder.record(100, &[KeyValue::new("key", "value")]);
 
         // Encode data as text or protobuf
         let encoder = TextEncoder::new();
