@@ -372,7 +372,7 @@ impl<S, R, ResBody> Service<Request<R>> for HttpMetrics<S>
 where
     S: Service<Request<R>, Response = Response<ResBody>>,
 {
-    type Response = Response<ResBody>;
+    type Response = S::Response;
     type Error = S::Error;
     type Future = ResponseFuture<S::Future>;
 
