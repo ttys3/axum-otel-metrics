@@ -6,6 +6,8 @@
 
 axum OpenTelemetry metrics middleware with prometheus exporter
 
+follow [Semantic Conventions for HTTP Metrics](https://github.com/open-telemetry/semantic-conventions/blob/main/docs/http/http-metrics.md)
+
 [axum](https://github.com/tokio-rs/axum) is an ergonomic and modular web framework built with Tokio, Tower, and Hyper
 
 be default, the metrics will be exported at `/metrics` endpoint.

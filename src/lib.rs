@@ -64,7 +64,7 @@ use prometheus::{Encoder, Registry, TextEncoder};
 
 use opentelemetry::{Key, KeyValue, Value};
 
-use opentelemetry::metrics::{Counter, Histogram};
+use opentelemetry::metrics::{Counter, Histogram, UpDownCounter};
 
 use opentelemetry::metrics::{MeterProvider as _, Unit};
 
@@ -91,6 +91,8 @@ pub struct Metric {
     pub req_duration: Histogram<f64>,
 
     pub req_size: Histogram<u64>,
+
+    pub req_active: UpDownCounter<i64>,
 }
 
 #[derive(Clone)]
@@ -98,6 +100,7 @@ pub struct MetricState {
     registry: Registry,
     pub metric: Metric,
     skipper: PathSkipper,
+    is_tls: bool,
 }
 
 #[derive(Clone)]
@@ -112,12 +115,11 @@ pub struct HttpMetricsLayer {
 }
 
 // TODO support custom buckets
-// allocation not allowed in statics: static HTTP_REQ_DURATION_HISTOGRAM_BUCKETS: Vec<f64> = vec![0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0];
-const HTTP_REQ_DURATION_HISTOGRAM_BUCKETS: &[f64] = &[0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0];
-
-// write .005 * 1000, .01 * 1000, .025 * 1000, .05 * 1000, .1 * 1000, .25 * 1000, .5 * 1000, 1 * 1000, 2.5 * 1000, 5 * 1000, 10 * 1000
-const HTTP_REQ_DURATION_MS_HISTOGRAM_BUCKETS: &[f64] =
-    &[5.0, 10.0, 25.0, 50.0, 100.0, 250.0, 500.0, 1000.0, 2500.0, 5000.0, 10000.0];
+// allocation not allowed in statics: static HTTP_REQ_DURATION_HISTOGRAM_BUCKETS: Vec<f64> = vec![0, 0.005, 0.01, 0.025, 0.05, 0.075, 0.1, 0.25, 0.5, 0.75, 1, 2.5, 5, 7.5, 10];
+// as https://github.com/open-telemetry/semantic-conventions/blob/main/docs/http/http-metrics.md#metric-httpserverrequestduration spec
+// This metric SHOULD be specified with ExplicitBucketBoundaries of [ 0, 0.005, 0.01, 0.025, 0.05, 0.075, 0.1, 0.25, 0.5, 0.75, 1, 2.5, 5, 7.5, 10 ].
+// the unit of the buckets is second
+const HTTP_REQ_DURATION_HISTOGRAM_BUCKETS: &[f64] = &[0.0, 0.005, 0.01, 0.025, 0.05, 0.075, 0.1, 0.25, 0.5, 0.75, 1.0, 2.5, 5.0, 7.5, 10.0];
 
 const KB: f64 = 1024.0;
 const MB: f64 = 1024.0 * KB;
@@ -180,6 +182,7 @@ pub struct HttpMetricsLayerBuilder {
     prefix: Option<String>,
     labels: Option<HashMap<String, String>>,
     skipper: PathSkipper,
+    is_tls: bool,
 }
 
 impl HttpMetricsLayerBuilder {
@@ -271,17 +274,7 @@ impl HttpMetricsLayerBuilder {
             .with_reader(exporter)
             .with_view(
                 new_view(
-                    Instrument::new().name("*_duration_milliseconds"),
-                    Stream::new().aggregation(Aggregation::ExplicitBucketHistogram {
-                        boundaries: HTTP_REQ_DURATION_MS_HISTOGRAM_BUCKETS.to_vec(),
-                        record_min_max: true,
-                    }),
-                )
-                .unwrap(),
-            )
-            .with_view(
-                new_view(
-                    Instrument::new().name("*_duration_seconds"),
+                    Instrument::new().name("*http.server.request.duration"),
                     Stream::new().aggregation(Aggregation::ExplicitBucketHistogram {
                         boundaries: HTTP_REQ_DURATION_HISTOGRAM_BUCKETS.to_vec(),
                         record_min_max: true,
@@ -291,7 +284,7 @@ impl HttpMetricsLayerBuilder {
             )
             .with_view(
                 new_view(
-                    Instrument::new().name("*request_size"),
+                    Instrument::new().name("*http.server.request.size"),
                     Stream::new().aggregation(Aggregation::ExplicitBucketHistogram {
                         boundaries: HTTP_REQ_SIZE_HISTOGRAM_BUCKETS.to_vec(),
                         record_min_max: true,
@@ -315,26 +308,34 @@ impl HttpMetricsLayerBuilder {
 
         // request_duration_seconds
         let req_duration = meter
-            .f64_histogram("request_duration_seconds")
+            .f64_histogram("http.server.request.duration")
             .with_unit(Unit::new("s"))
             .with_description("The HTTP request latencies in seconds.")
             .init();
 
         // request_size_bytes
         let req_size = meter
-            .u64_histogram("request_size")
+            .u64_histogram("http.server.request.size")
             .with_unit(Unit::new("By"))
             .with_description("The HTTP request sizes in bytes.")
+            .init();
+
+        // no u64_up_down_counter because up_down_counter maybe < 0 since it allow negative values
+        let req_active = meter
+            .i64_up_down_counter("http.server.active_requests")
+            .with_description("The number of active HTTP requests.")
             .init();
 
         let meter_state = MetricState {
             registry,
             metric: Metric {
-                requests_total: requests_total,
-                req_duration: req_duration,
-                req_size: req_size,
+                requests_total,
+                req_duration,
+                req_size,
+                req_active,
             },
             skipper: self.skipper,
+            is_tls: self.is_tls,
         };
 
         HttpMetricsLayer { state: meter_state }
@@ -361,6 +362,8 @@ pin_project! {
         state: MetricState,
         path: String,
         method: String,
+        url_scheme: String,
+        host: String,
         req_size: u64,
     }
 }
@@ -378,6 +381,29 @@ where
     }
 
     fn call(&mut self, req: Request<R>) -> Self::Future {
+        let url_scheme = if self.state.is_tls {
+            "https".to_string()
+        } else {
+            (||{
+                if let Some(scheme) = req.headers().get("X-Forwarded-Proto") {
+                    return scheme.to_str().unwrap().to_string();
+                } else if let Some(scheme) = req.headers().get("X-Forwarded-Protocol") {
+                    return scheme.to_str().unwrap().to_string();
+                } if req.headers().get("X-Forwarded-Ssl").is_some().to_string() == "on" {
+                    return "https".to_string();
+                } if let Some(scheme) = req.headers().get("X-Url-Scheme") {
+                    return scheme.to_str().unwrap().to_string();
+                } else {
+                    return "http".to_string();
+                }
+            })()
+        };
+        // ref https://github.com/open-telemetry/semantic-conventions/blob/main/docs/http/http-metrics.md#metric-httpserveractive_requests
+        // http.request.method and url.scheme is required
+        self.state.metric.req_active.add(1, &[
+            KeyValue::new("http.request.method", req.method().as_str().to_string()),
+            KeyValue::new("url.scheme", url_scheme.clone()),
+        ]);
         let start = Instant::now();
         let method = req.method().clone().to_string();
         let path = if let Some(matched_path) = req.extensions().get::<MatchedPath>() {
@@ -386,15 +412,23 @@ where
             "".to_owned()
         };
 
+        let host = req.headers().get(http::header::HOST)
+            .and_then(|h| h.to_str().ok()).unwrap_or("unknown").to_string();
+
         let req_size = compute_approximate_request_size(&req);
+
+        // for scheme, see github.com/labstack/echo/v4@v4.11.1/context.go
+        // we can not use req.uri().scheme() since for non-absolute uri, it is always None
 
         ResponseFuture {
             inner: self.service.call(req),
             start,
             method,
             path,
+            host,
             req_size: req_size as u64,
             state: self.state.clone(),
+            url_scheme,
         }
     }
 }
@@ -429,6 +463,11 @@ where
         let this = self.project();
         let response = ready!(this.inner.poll(cx))?;
 
+        this.state.metric.req_active.add(-1, &[
+            KeyValue::new("http.request.method", this.method.clone()),
+            KeyValue::new("url.scheme", this.url_scheme.clone()),
+        ]);
+
         if (this.state.skipper.skip)(this.path.as_str()) {
             return Poll::Ready(Ok(response));
         }
@@ -438,11 +477,19 @@ where
 
         let labels = [
             KeyValue {
-                key: Key::from("method"),
+                key: Key::from("http.request.method"),
                 value: Value::from(this.method.clone()),
             },
-            KeyValue::new("path", this.path.clone()),
-            KeyValue::new("status", status),
+            KeyValue::new("http.route", this.path.clone()),
+            KeyValue::new("http.response.status_code", status),
+
+            /// Name of the local HTTP server that received the request.
+            /// Determined by using the first of the following that applies
+            ///
+            /// 1. The primary server name of the matched virtual host. MUST only include host identifier.
+            /// 2. Host identifier of the request target if it's sent in absolute-form.
+            /// 3. Host identifier of the Host header
+            KeyValue::new("server.address", this.host.clone()),
         ];
 
         this.state.metric.requests_total.add(1, &labels);
@@ -450,14 +497,6 @@ where
         this.state.metric.req_size.record(*this.req_size, &labels);
 
         this.state.metric.req_duration.record(latency, &labels);
-
-        // tracing::trace!(
-        //     "record metrics, method={} latency={} status={} labels={:?}",
-        //     &this.method,
-        //     &latency,
-        //     &status,
-        //     &labels
-        // );
 
         Ready(Ok(response))
     }
