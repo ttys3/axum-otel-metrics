@@ -79,7 +79,7 @@ use tower::{Layer, Service};
 use futures_util::ready;
 use opentelemetry::sdk::Resource;
 use pin_project_lite::pin_project;
-
+use http_body::Body as httpBody; // for `Body::size_hint`
 // service.instance used by Tencent Cloud TKE APM only, for view application metrics by pod IP
 const SERVICE_INSTANCE: Key = Key::from_static_str("service.instance");
 
@@ -91,6 +91,8 @@ pub struct Metric {
     pub req_duration: Histogram<f64>,
 
     pub req_size: Histogram<u64>,
+
+    pub res_size: Histogram<u64>,
 
     pub req_active: UpDownCounter<i64>,
 }
@@ -292,6 +294,16 @@ impl HttpMetricsLayerBuilder {
                 )
                 .unwrap(),
             )
+            .with_view(
+                new_view(
+                    Instrument::new().name("*http.server.response.size"),
+                    Stream::new().aggregation(Aggregation::ExplicitBucketHistogram {
+                        boundaries: HTTP_REQ_SIZE_HISTOGRAM_BUCKETS.to_vec(),
+                        record_min_max: true,
+                    }),
+                )
+                    .unwrap(),
+            )
             .build();
 
         // init the global meter provider
@@ -320,6 +332,12 @@ impl HttpMetricsLayerBuilder {
             .with_description("The HTTP request sizes in bytes.")
             .init();
 
+        let res_size = meter
+            .u64_histogram("http.server.response.size")
+            .with_unit(Unit::new("By"))
+            .with_description("The HTTP reponse sizes in bytes.")
+            .init();
+
         // no u64_up_down_counter because up_down_counter maybe < 0 since it allow negative values
         let req_active = meter
             .i64_up_down_counter("http.server.active_requests")
@@ -332,6 +350,7 @@ impl HttpMetricsLayerBuilder {
                 requests_total,
                 req_duration,
                 req_size,
+                res_size,
                 req_active,
             },
             skipper: self.skipper,
@@ -371,6 +390,7 @@ pin_project! {
 impl<S, R, ResBody> Service<Request<R>> for HttpMetrics<S>
 where
     S: Service<Request<R>, Response = Response<ResBody>>,
+    ResBody: httpBody,
 {
     type Response = S::Response;
     type Error = S::Error;
@@ -453,7 +473,7 @@ fn compute_approximate_request_size<T>(req: &Request<T>) -> usize {
     s
 }
 
-impl<F, B, E> Future for ResponseFuture<F>
+impl<F, B: httpBody, E> Future for ResponseFuture<F>
 where
     F: Future<Output = Result<Response<B>, E>>,
 {
@@ -475,6 +495,8 @@ where
         let latency = this.start.elapsed().as_secs_f64();
         let status = response.status().as_u16().to_string();
 
+        let res_size = response.body().size_hint().upper().unwrap_or(0);
+
         let labels = [
             KeyValue {
                 key: Key::from("http.request.method"),
@@ -495,6 +517,8 @@ where
         this.state.metric.requests_total.add(1, &labels);
 
         this.state.metric.req_size.record(*this.req_size, &labels);
+
+        this.state.metric.res_size.record(res_size, &labels);
 
         this.state.metric.req_duration.record(latency, &labels);
 
