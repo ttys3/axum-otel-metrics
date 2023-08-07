@@ -13,26 +13,56 @@ follow [Semantic Conventions for HTTP Metrics](https://github.com/open-telemetry
 be default, the metrics will be exported at `/metrics` endpoint.
 and below metrics will be exported:
 
-request_duration_seconds **histogram**
-```
-request_duration_seconds_bucket
-request_duration_seconds_sum
-request_duration_seconds_count
-```
 
-requests_total **counter**
+`requests_total` **counter**
 
 ```
 requests_total
 ```
 
-labels for `request_duration_seconds` and `requests_total`:
+`http_server_active_requests` **gauge**
+
+The number of active HTTP requests
+
+`http_server_request_duration_seconds` **histogram**
+```
+http_server_request_duration_seconds_bucket
+http_server_request_duration_seconds_sum
+http_server_request_duration_seconds_count
+```
+
+`http_server_request_size_bytes` **histogram**
+```
+http_server_request_size_bytes_bucket
+http_server_request_size_bytes_sum
+http_server_request_size_bytes_count
+```
+
+`http_server_response_size_bytes_` **histogram**
+```
+http_server_response_size_bytes__bucket
+http_server_response_size_bytes__sum
+http_server_response_size_bytes__count
+```
+
+labels for `requests_total`,
+`http_server_request_duration_seconds`, `http_server_request_size_bytes`,
+`http_server_response_size_bytes` :
 
 ```
-method
-path
-status
+http_request_method
+http_route
+http_response_status_code
+server_address
 ```
+
+labels for `http_server_active_requests` :
+
+```
+http_request_method
+url_scheme
+```
+
 
 ## Usage
 
