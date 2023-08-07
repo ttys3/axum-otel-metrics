@@ -71,6 +71,11 @@ async fn set_header<B>(mut response: Response<B>) -> Response<B> {
 
 async fn handler(state: State<SharedState>, path: MatchedPath) -> Html<String> {
     let mut rng = rand::thread_rng();
+
+    // 1024 / 16 = 64
+    let n_bytes = rng.gen_range(1..5120*64); // 16 bytes to 5120 KB
+    let mut dummy = "123456789abcdef".repeat(n_bytes);
+
     let delay_ms: u64;
     match path.as_str() {
         "/hello" => {
@@ -83,7 +88,8 @@ async fn handler(state: State<SharedState>, path: MatchedPath) -> Html<String> {
         }
         _ => {
             delay_ms = rng.gen_range(0..100);
-            std::thread::sleep(time::Duration::from_millis(delay_ms))
+            std::thread::sleep(time::Duration::from_millis(delay_ms));
+            dummy = "".to_string();
         }
     }
 
@@ -97,9 +103,10 @@ async fn handler(state: State<SharedState>, path: MatchedPath) -> Html<String> {
     <a href='/sub/sub1' style='display: inline-block; width: 100px;'>/sub/sub1</a>\n\
     <a href='/sub/sub2' style='display: inline-block; width: 100px;'>/sub/sub2</a>\n\
     <a href='/skip-this' style='display: inline-block; width: 100px;'>/skip-this</a>\n\
-    <hr /><a href='/metrics'>/metrics</a>\n\n",
+    <hr /><a href='/metrics'>/metrics</a>{}\n\n",
         path.as_str(),
         state.root_dir,
-        delay_ms
+        delay_ms,
+        dummy,
     ))
 }
