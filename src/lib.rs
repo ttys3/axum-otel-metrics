@@ -505,12 +505,12 @@ where
             KeyValue::new("http.route", this.path.clone()),
             KeyValue::new("http.response.status_code", status),
 
-            /// Name of the local HTTP server that received the request.
-            /// Determined by using the first of the following that applies
-            ///
-            /// 1. The primary server name of the matched virtual host. MUST only include host identifier.
-            /// 2. Host identifier of the request target if it's sent in absolute-form.
-            /// 3. Host identifier of the Host header
+            // server.address: Name of the local HTTP server that received the request.
+            // Determined by using the first of the following that applies
+            //
+            // 1. The primary server name of the matched virtual host. MUST only include host identifier.
+            // 2. Host identifier of the request target if it's sent in absolute-form.
+            // 3. Host identifier of the Host header
             KeyValue::new("server.address", this.host.clone()),
         ];
 
