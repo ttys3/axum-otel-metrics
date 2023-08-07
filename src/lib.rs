@@ -83,6 +83,7 @@ use http_body::Body as httpBody; // for `Body::size_hint`
 // service.instance used by Tencent Cloud TKE APM only, for view application metrics by pod IP
 const SERVICE_INSTANCE: Key = Key::from_static_str("service.instance");
 
+/// the metrics we used in the middleware
 #[derive(Clone)]
 pub struct Metric {
     pub requests_total: Counter<u64>,
@@ -99,20 +100,34 @@ pub struct Metric {
 
 #[derive(Clone)]
 pub struct MetricState {
+    /// Prometheus Registry we used to gathering and exporting metrics in the export endpoint
     registry: Registry,
+
+    /// hold the metrics we used in the middleware
     pub metric: Metric,
+
+    /// PathSkipper used to skip some paths for not recording metrics
     skipper: PathSkipper,
+
+    /// whether the service is running as a TLS server or not.
+    /// this is used to help determine the `url.scheme` otel meter attribute.
+    /// because there is no way to get the scheme from the request in http server
+    /// (except for absolute uri request, but which is only used when as a proxy server).
     is_tls: bool,
 }
 
+/// the service wrapper
 #[derive(Clone)]
 pub struct HttpMetrics<S> {
     pub(crate) state: MetricState,
+
+    /// inner service which is wrapped by this middleware
     service: S,
 }
 
 #[derive(Clone)]
 pub struct HttpMetricsLayer {
+    /// the metric state, use both by the middleware handler and metrics export endpoint
     pub(crate) state: MetricState,
 }
 
@@ -373,7 +388,7 @@ impl<S> Layer<S> for HttpMetricsLayer {
 }
 
 pin_project! {
-    /// Response future for [`HttpMetrics`].
+    /// Response future for [`HttpMetrics`] Service.
     pub struct ResponseFuture<F> {
         #[pin]
         inner: F,
@@ -453,6 +468,10 @@ where
     }
 }
 
+
+/// compute approximate request size
+///
+/// the implimentation refs [labstack/echo-contrib 's prometheus middleware](https://github.com/labstack/echo-contrib/blob/db8911a1af7abb6bdafbd999adada548fd9c0849/echoprometheus/prometheus.go#L329)
 fn compute_approximate_request_size<T>(req: &Request<T>) -> usize {
     let mut s = 0;
     s += req.uri().path().len();
