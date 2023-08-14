@@ -30,4 +30,4 @@ http-body = "0.4.5"
 
 
 [dev-dependencies]
-tokio = { version = "1.29.1", features = ["macros"] }
+tokio = { version = "1.31.0", features = ["macros"] }
