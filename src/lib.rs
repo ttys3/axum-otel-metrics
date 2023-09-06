@@ -161,6 +161,15 @@ impl HttpMetricsLayer {
             .with_state(self.state.clone())
     }
 
+    /// Create a Router that has a customized listen metrics path
+    /// instead of `/metrics`.  You can merge this router into
+    /// your application's router to serve metrics.
+    pub fn path_route<S>(&self, path: String) -> Router<S> {
+        Router::new()
+            .route(path.as_str(), get(Self::exporter_handler))
+            .with_state(self.state.clone())
+    }
+
     // TODO use a static global exporter like autometrics-rs?
     // https://github.com/autometrics-dev/autometrics-rs/blob/d3e7bffeede43f6c77b6a992b0443c0fca34003f/autometrics/src/prometheus_exporter.rs#L10
     pub async fn exporter_handler(state: State<MetricState>) -> impl IntoResponse {
