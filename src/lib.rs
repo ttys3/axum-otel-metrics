@@ -129,6 +129,7 @@ pub struct HttpMetrics<S> {
 pub struct HttpMetricsLayer {
     /// the metric state, use both by the middleware handler and metrics export endpoint
     pub(crate) state: MetricState,
+    path: String,
 }
 
 // TODO support custom buckets
@@ -157,16 +158,7 @@ const HTTP_REQ_SIZE_HISTOGRAM_BUCKETS: &[f64] = &[
 impl HttpMetricsLayer {
     pub fn routes<S>(&self) -> Router<S> {
         Router::new()
-            .route("/metrics", get(Self::exporter_handler))
-            .with_state(self.state.clone())
-    }
-
-    /// Create a Router that has a customized listen metrics path
-    /// instead of `/metrics`.  You can merge this router into
-    /// your application's router to serve metrics.
-    pub fn path_route<S>(&self, path: String) -> Router<S> {
-        Router::new()
-            .route(path.as_str(), get(Self::exporter_handler))
+            .route(self.path.as_str(), get(Self::exporter_handler))
             .with_state(self.state.clone())
     }
 
@@ -201,19 +193,28 @@ impl Default for PathSkipper {
     }
 }
 
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct HttpMetricsLayerBuilder {
     service_name: Option<String>,
     service_version: Option<String>,
     prefix: Option<String>,
+    path: String,
     labels: Option<HashMap<String, String>>,
     skipper: PathSkipper,
     is_tls: bool,
 }
 
+impl Default for HttpMetricsLayerBuilder {
+    fn default() -> Self {
+        HttpMetricsLayerBuilder::new()
+    }
+}
+
 impl HttpMetricsLayerBuilder {
     pub fn new() -> Self {
-        Self::default()
+        let mut v = Self::default();
+        v.path = "/metrics".to_string();
+        v
     }
 
     pub fn with_service_name(mut self, service_name: String) -> Self {
@@ -228,6 +229,11 @@ impl HttpMetricsLayerBuilder {
 
     pub fn with_prefix(mut self, prefix: String) -> Self {
         self.prefix = Some(prefix);
+        self
+    }
+
+    pub fn with_path(mut self, path: String) -> Self {
+        self.path = path;
         self
     }
 
@@ -381,7 +387,10 @@ impl HttpMetricsLayerBuilder {
             is_tls: self.is_tls,
         };
 
-        HttpMetricsLayer { state: meter_state }
+        HttpMetricsLayer {
+            state: meter_state,
+            path: self.path,
+        }
     }
 }
 
