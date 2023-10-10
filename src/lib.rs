@@ -212,9 +212,10 @@ impl Default for HttpMetricsLayerBuilder {
 
 impl HttpMetricsLayerBuilder {
     pub fn new() -> Self {
-        let mut v = Self::default();
-        v.path = "/metrics".to_string();
-        v
+        HttpMetricsLayerBuilder {
+            path: "/metrics".to_string(),
+            ..Default::default()
+        }
     }
 
     pub fn with_service_name(mut self, service_name: String) -> Self {
