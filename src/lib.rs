@@ -206,16 +206,21 @@ pub struct HttpMetricsLayerBuilder {
 
 impl Default for HttpMetricsLayerBuilder {
     fn default() -> Self {
-        HttpMetricsLayerBuilder::new()
+        Self {
+            service_name: None,
+            service_version: None,
+            prefix: None,
+            path: "/metrics".to_string(),
+            labels: None,
+            skipper: PathSkipper::default(),
+            is_tls: false,
+        }
     }
 }
 
 impl HttpMetricsLayerBuilder {
     pub fn new() -> Self {
-        HttpMetricsLayerBuilder {
-            path: "/metrics".to_string(),
-            ..Default::default()
-        }
+        HttpMetricsLayerBuilder::default()
     }
 
     pub fn with_service_name(mut self, service_name: String) -> Self {
