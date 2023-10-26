@@ -138,3 +138,15 @@ Standard output https://opentelemetry.io/docs/reference/specification/metrics/sd
 ## Metrics Data Model
 
 https://opentelemetry.io/docs/reference/specification/metrics/data-model/
+
+
+## Related Projects
+
+https://github.com/nlopes/actix-web-prom
+> Actix-web middleware to expose Prometheus metrics
+
+https://github.com/sd2k/rocket_prometheus
+> Prometheus fairing and handler for Rocket
+
+https://github.com/Ptrskay3/axum-prometheus
+> axum-prometheus relies on metrics.rs and its ecosystem to collect and export metrics - for instance for Prometheus, metrics_exporter_prometheus is used as a backend to interact with Prometheus.
