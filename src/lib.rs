@@ -52,6 +52,7 @@ use axum::http::Response;
 use axum::{extract::MatchedPath, extract::State, http::Request, response::IntoResponse, routing::get, Router};
 use std::collections::HashMap;
 use std::env;
+use std::sync::Arc;
 use std::time::Duration;
 
 use std::future::Future;
@@ -176,20 +177,21 @@ impl HttpMetricsLayer {
 
 #[derive(Clone)]
 pub struct PathSkipper {
-    skip: fn(&str) -> bool,
+    skip: Arc<dyn Fn(&str) -> bool + 'static + Send + Sync>,
 }
 
 impl PathSkipper {
     pub fn new(skip: fn(&str) -> bool) -> Self {
-        Self { skip }
+        Self { skip: Arc::new(skip) }
+    }
+    pub fn new_with_fn(skip: Arc<dyn Fn(&str) -> bool + 'static + Send + Sync>) -> Self {
+        Self { skip: skip }
     }
 }
 
 impl Default for PathSkipper {
     fn default() -> Self {
-        Self {
-            skip: |s| s.starts_with("/metrics") || s.starts_with("/favicon.ico"),
-        }
+        Self::new(|s| s.starts_with("/metrics") || s.starts_with("/favicon.ico"))
     }
 }
 
