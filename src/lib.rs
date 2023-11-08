@@ -175,7 +175,9 @@ impl HttpMetricsLayer {
     }
 }
 
-/// A helper that lets the metrics engine ignore certain paths.
+/// A helper that instructs the metrics layer to ignore
+/// certain paths.
+///
 /// The HttpMetricsLayerBuilder uses this helper during the
 /// construction of the HttpMetricsLayer that will be called
 /// by Axum / Hyper / Tower when a request comes in.
