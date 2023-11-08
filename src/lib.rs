@@ -175,21 +175,40 @@ impl HttpMetricsLayer {
     }
 }
 
+/// A helper that lets the metrics engine ignore certain paths.
+/// The HttpMetricsLayerBuilder uses this helper during the
+/// construction of the HttpMetricsLayer that will be called
+/// by Axum / Hyper / Tower when a request comes in.
 #[derive(Clone)]
 pub struct PathSkipper {
     skip: Arc<dyn Fn(&str) -> bool + 'static + Send + Sync>,
 }
 
 impl PathSkipper {
+    /// Returns a PathSkipper that skips any path for which
+    /// the passed fn returns true.  Only static functions
+    /// are accepted -- callables such as closures that
+    /// capture their surrounding context will not work here.
     pub fn new(skip: fn(&str) -> bool) -> Self {
         Self { skip: Arc::new(skip) }
     }
+
+    /// Returns a PathSkipper that skips any path for which
+    /// the passed impl Fn returns true.  This variant requires
+    /// the callable to be wrapped in an Arc but, in exchange
+    /// for this requirement, the caller can use closures that
+    /// capture variables from their context.
     pub fn new_with_fn(skip: Arc<dyn Fn(&str) -> bool + 'static + Send + Sync>) -> Self {
         Self { skip: skip }
     }
 }
 
 impl Default for PathSkipper {
+    /// Returns a PathSkipper that skips any path which
+    /// starts with /metrics or /favicon.ico.
+    ///
+    /// This is the default implementation used when
+    /// building an HttpMetricsLayerBuilder from scratch.
     fn default() -> Self {
         Self::new(|s| s.starts_with("/metrics") || s.starts_with("/favicon.ico"))
     }
