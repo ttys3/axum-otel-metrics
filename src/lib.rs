@@ -198,6 +198,10 @@ impl PathSkipper {
     /// the callable to be wrapped in an Arc but, in exchange
     /// for this requirement, the caller can use closures that
     /// capture variables from their context.
+    ///
+    /// The callable argument *must be thread-safe*.  You, as
+    /// the implementor and user of this code, have that
+    /// responsibility.
     pub fn new_with_fn(skip: Arc<dyn Fn(&str) -> bool + 'static + Send + Sync>) -> Self {
         Self { skip: skip }
     }
