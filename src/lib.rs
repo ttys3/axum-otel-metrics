@@ -580,10 +580,11 @@ mod tests {
     use opentelemetry::sdk::metrics::MeterProvider;
     use opentelemetry::{global, Context, KeyValue};
     use prometheus::{Encoder, Registry, TextEncoder};
+    use std::sync::Arc;
 
     #[test]
     fn test_prometheus_exporter() {
-        let cx = Context::current();
+        let _cx = Context::current();
 
         let registry = Registry::new();
 
@@ -644,6 +645,27 @@ mod tests {
             .route("/", get(handler))
             .route("/hello", get(handler))
             .route("/world", get(handler))
+            // add the metrics middleware
+            .layer(metrics)
+            .with_state(AppState {});
+
+        async fn handler(_state: State<AppState>) -> &'static str {
+            "<h1>Hello, World!</h1>"
+        }
+    }
+
+    #[test]
+    fn test_builder_with_arced_skipper() {
+        #[derive(Clone)]
+        struct AppState {}
+
+        let metrics = HttpMetricsLayerBuilder::new()
+            .with_skipper(crate::PathSkipper::new_with_fn(Arc::new(|_: &str| true)))
+            .build();
+        let _app: Router<AppState> = Router::new()
+            // export metrics at `/metrics` endpoint
+            .merge(metrics.routes::<AppState>())
+            .route("/", get(handler))
             // add the metrics middleware
             .layer(metrics)
             .with_state(AppState {});
