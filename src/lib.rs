@@ -178,8 +178,8 @@ impl HttpMetricsLayer {
 /// A helper that instructs the metrics layer to ignore
 /// certain paths.
 ///
-/// The HttpMetricsLayerBuilder uses this helper during the
-/// construction of the HttpMetricsLayer that will be called
+/// The [HttpMetricsLayerBuilder] uses this helper during the
+/// construction of the [HttpMetricsLayer] that will be called
 /// by Axum / Hyper / Tower when a request comes in.
 #[derive(Clone)]
 pub struct PathSkipper {
@@ -187,19 +187,23 @@ pub struct PathSkipper {
 }
 
 impl PathSkipper {
-    /// Returns a PathSkipper that skips any path for which
-    /// the passed fn returns true.  Only static functions
-    /// are accepted -- callables such as closures that
-    /// capture their surrounding context will not work here.
+    /// Returns a [PathSkipper] that skips recording metrics
+    /// for requests whose path, when passed to `fn`, returns
+    /// `true`.
+    ///
+    /// Only static functions are accepted -- callables such
+    /// as closures that capture their surrounding context will
+    /// not work here.  For a variant that works, consult the
+    /// [PathSkipper::new_with_fn] method.
     pub fn new(skip: fn(&str) -> bool) -> Self {
         Self { skip: Arc::new(skip) }
     }
 
-    /// Returns a PathSkipper that skips any path for which
-    /// the passed impl Fn returns true.  This variant requires
-    /// the callable to be wrapped in an Arc but, in exchange
-    /// for this requirement, the caller can use closures that
-    /// capture variables from their context.
+    /// Dynamic variant of [PathSkipper::new].
+    ///
+    /// This variant requires the callable to be wrapped in an
+    /// [Arc] but, in exchange for this requirement, the caller
+    /// can use closures that capture variables from their context.
     ///
     /// The callable argument *must be thread-safe*.  You, as
     /// the implementor and user of this code, have that
@@ -210,8 +214,8 @@ impl PathSkipper {
 }
 
 impl Default for PathSkipper {
-    /// Returns a PathSkipper that skips any path which
-    /// starts with /metrics or /favicon.ico.
+    /// Returns a `PathSkipper` that skips any path which
+    /// starts with `/metrics` or `/favicon.ico``.
     ///
     /// This is the default implementation used when
     /// building an HttpMetricsLayerBuilder from scratch.
