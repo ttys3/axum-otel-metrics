@@ -114,7 +114,7 @@ https://opentelemetry.io/docs/instrumentation/rust/#status-and-releases
 
 | Traces                                                                                           | Metrics | Logs                |
 |--------------------------------------------------------------------------------------------------|---------|---------------------|
-| [Stable](https://opentelemetry.io/docs/reference/specification/versioning-and-stability/#stable) | Alpha   | Not yet implemented |
+| [Beta](https://opentelemetry.io/docs/reference/specification/versioning-and-stability/#stable) | Alpha   | Alpha |
 
 ## OpenTelemetry Metrics Exporter
 
