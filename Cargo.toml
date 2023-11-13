@@ -13,7 +13,8 @@ exclude = [".github/*", "examples/*", "tests/*"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [dependencies]
 axum = "0.6.20"
-opentelemetry = { version = "0.20.0", features = ["metrics", "rt-tokio"] }
+opentelemetry = { version = "0.21", features = ["metrics"] }
+opentelemetry_sdk = { version = "0.21.0", features = ["rt-tokio"] }
 opentelemetry-prometheus = { version = "0.14.0", features = ["prometheus-encoding"] }
 opentelemetry-semantic-conventions = { version = "0.13.0"}
 #axum = { git = "https://github.com/tokio-rs/axum.git", branch = "main"}
@@ -25,7 +26,7 @@ prometheus = "0.13.3"
 tower = "0.4.13"
 futures-util = "0.3.29"
 pin-project-lite = "0.2.13"
-http = "0.2.10"
+http = "0.2.11"
 http-body = "0.4.5"
 
 

@@ -69,8 +69,8 @@ use opentelemetry::metrics::{Counter, Histogram, UpDownCounter};
 
 use opentelemetry::metrics::{MeterProvider as _, Unit};
 
-use opentelemetry::sdk::metrics::{new_view, Aggregation, Instrument, MeterProvider, Stream};
-use opentelemetry::sdk::resource::{EnvResourceDetector, SdkProvidedResourceDetector, TelemetryResourceDetector};
+use opentelemetry_sdk::metrics::{new_view, Aggregation, Instrument, MeterProvider, Stream};
+use opentelemetry_sdk::resource::{EnvResourceDetector, SdkProvidedResourceDetector, TelemetryResourceDetector};
 use opentelemetry_semantic_conventions::resource::{SERVICE_NAME, SERVICE_NAMESPACE, SERVICE_VERSION};
 
 use opentelemetry::global;
@@ -78,7 +78,7 @@ use opentelemetry::global;
 use tower::{Layer, Service};
 
 use futures_util::ready;
-use opentelemetry::sdk::Resource;
+use opentelemetry_sdk::Resource;
 use pin_project_lite::pin_project;
 use http_body::Body as httpBody; // for `Body::size_hint`
 // service.instance used by Tencent Cloud TKE APM only, for view application metrics by pod IP
@@ -606,7 +606,7 @@ mod tests {
     use axum::extract::State;
     use axum::routing::get;
     use axum::Router;
-    use opentelemetry::sdk::metrics::MeterProvider;
+    use opentelemetry_sdk::metrics::MeterProvider;
     use opentelemetry::{global, Context, KeyValue};
     use prometheus::{Encoder, Registry, TextEncoder};
     use std::sync::Arc;
