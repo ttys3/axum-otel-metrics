@@ -26,7 +26,7 @@ prometheus = "0.13.3"
 tower = "0.4.13"
 futures-util = "0.3.29"
 pin-project-lite = "0.2.13"
-http = "0.2.11"
+http = "1.0.0"
 http-body = "0.4.5"
 
 
