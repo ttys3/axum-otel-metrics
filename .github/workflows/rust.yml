@@ -15,12 +15,17 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
+
+    - name: Cache cargo & target directories
+      uses: Swatinem/rust-cache@v2
+      with:
+        key: "v2"
+
     - name: Install latest stable Rust toolchain
-      uses: actions-rs/toolchain@v1
+      uses: dtolnay/rust-toolchain@stable
       with:
         toolchain: stable
-        default: true
         components: rustfmt, clippy
     - name: Build
       run: cargo build
