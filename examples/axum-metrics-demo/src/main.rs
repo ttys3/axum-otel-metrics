@@ -1,7 +1,6 @@
 use axum::extract::{MatchedPath, State};
 use axum::{response::Html, routing::{get, post}, Router};
 use rand::Rng;
-use std::net::SocketAddr;
 use std::time;
 
 use axum_otel_metrics::{HttpMetricsLayerBuilder, PathSkipper};
@@ -59,9 +58,12 @@ async fn main() {
         .with_state(state.clone());
 
     // run it
-    let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
-    println!("listening on http://{}", addr);
-    axum::Server::bind(&addr).serve(app.into_make_service()).await.unwrap();
+    let addr = "127.0.0.1:3000";
+    let listener = tokio::net::TcpListener::bind(addr)
+        .await
+        .unwrap();
+    println!("listening on http://{}", listener.local_addr().unwrap());
+    axum::serve(listener, app).await.unwrap();
 }
 
 async fn set_header<B>(mut response: Response<B>) -> Response<B> {
