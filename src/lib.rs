@@ -69,7 +69,7 @@ use opentelemetry::metrics::{Counter, Histogram, UpDownCounter};
 
 use opentelemetry::metrics::{MeterProvider as _, Unit};
 
-use opentelemetry_sdk::metrics::{new_view, Aggregation, Instrument, MeterProvider, Stream};
+use opentelemetry_sdk::metrics::{new_view, Aggregation, Instrument, SdkMeterProvider, Stream};
 use opentelemetry_sdk::resource::{EnvResourceDetector, SdkProvidedResourceDetector, TelemetryResourceDetector};
 use opentelemetry_semantic_conventions::resource::{SERVICE_NAME, SERVICE_NAMESPACE, SERVICE_VERSION};
 
@@ -78,10 +78,10 @@ use opentelemetry::global;
 use tower::{Layer, Service};
 
 use futures_util::ready;
+use http_body::Body as httpBody;
 use opentelemetry_sdk::Resource;
-use pin_project_lite::pin_project;
-use http_body::Body as httpBody; // for `Body::size_hint`
-// service.instance used by Tencent Cloud TKE APM only, for view application metrics by pod IP
+use pin_project_lite::pin_project; // for `Body::size_hint`
+                                   // service.instance used by Tencent Cloud TKE APM only, for view application metrics by pod IP
 const SERVICE_INSTANCE: Key = Key::from_static_str("service.instance");
 
 /// the metrics we used in the middleware
@@ -138,7 +138,9 @@ pub struct HttpMetricsLayer {
 // as https://github.com/open-telemetry/semantic-conventions/blob/main/docs/http/http-metrics.md#metric-httpserverrequestduration spec
 // This metric SHOULD be specified with ExplicitBucketBoundaries of [ 0, 0.005, 0.01, 0.025, 0.05, 0.075, 0.1, 0.25, 0.5, 0.75, 1, 2.5, 5, 7.5, 10 ].
 // the unit of the buckets is second
-const HTTP_REQ_DURATION_HISTOGRAM_BUCKETS: &[f64] = &[0.0, 0.005, 0.01, 0.025, 0.05, 0.075, 0.1, 0.25, 0.5, 0.75, 1.0, 2.5, 5.0, 7.5, 10.0];
+const HTTP_REQ_DURATION_HISTOGRAM_BUCKETS: &[f64] = &[
+    0.0, 0.005, 0.01, 0.025, 0.05, 0.075, 0.1, 0.25, 0.5, 0.75, 1.0, 2.5, 5.0, 7.5, 10.0,
+];
 
 const KB: f64 = 1024.0;
 const MB: f64 = 1024.0 * KB;
@@ -289,24 +291,24 @@ impl HttpMetricsLayerBuilder {
 
         let ns = env::var("INSTANCE_NAMESPACE").unwrap_or_default();
         if !ns.is_empty() {
-            resource.push(SERVICE_NAMESPACE.string(ns.clone()));
+            resource.push(KeyValue::new(SERVICE_NAMESPACE, ns.clone()));
         }
 
         let instance_ip = env::var("INSTANCE_IP").unwrap_or_default();
         if !instance_ip.is_empty() {
-            resource.push(SERVICE_INSTANCE.string(instance_ip));
+            resource.push(KeyValue::new(SERVICE_INSTANCE, instance_ip));
         }
 
         if let Some(service_name) = self.service_name {
             // `foo.ns`
             if !ns.is_empty() && !service_name.starts_with(format!("{}.", &ns).as_str()) {
-                resource.push(SERVICE_NAME.string(format!("{}.{}", service_name, &ns)));
+                resource.push(KeyValue::new(SERVICE_NAME, format!("{}.{}", service_name, &ns)));
             } else {
-                resource.push(SERVICE_NAME.string(service_name));
+                resource.push(KeyValue::new(SERVICE_NAME, service_name));
             }
         }
         if let Some(service_version) = self.service_version {
-            resource.push(SERVICE_VERSION.string(service_version));
+            resource.push(KeyValue::new(SERVICE_VERSION, service_version));
         }
 
         let res = Resource::from_detectors(
@@ -338,7 +340,7 @@ impl HttpMetricsLayerBuilder {
             .build()
             .unwrap();
 
-        let provider = MeterProvider::builder()
+        let provider = SdkMeterProvider::builder()
             .with_resource(res)
             .with_reader(exporter)
             .with_view(
@@ -369,7 +371,7 @@ impl HttpMetricsLayerBuilder {
                         record_min_max: true,
                     }),
                 )
-                    .unwrap(),
+                .unwrap(),
             )
             .build();
 
@@ -474,14 +476,16 @@ where
         let url_scheme = if self.state.is_tls {
             "https".to_string()
         } else {
-            (||{
+            (|| {
                 if let Some(scheme) = req.headers().get("X-Forwarded-Proto") {
                     return scheme.to_str().unwrap().to_string();
                 } else if let Some(scheme) = req.headers().get("X-Forwarded-Protocol") {
                     return scheme.to_str().unwrap().to_string();
-                } if req.headers().get("X-Forwarded-Ssl").is_some().to_string() == "on" {
+                }
+                if req.headers().get("X-Forwarded-Ssl").is_some().to_string() == "on" {
                     return "https".to_string();
-                } if let Some(scheme) = req.headers().get("X-Url-Scheme") {
+                }
+                if let Some(scheme) = req.headers().get("X-Url-Scheme") {
                     return scheme.to_str().unwrap().to_string();
                 } else {
                     return "http".to_string();
@@ -490,10 +494,13 @@ where
         };
         // ref https://github.com/open-telemetry/semantic-conventions/blob/main/docs/http/http-metrics.md#metric-httpserveractive_requests
         // http.request.method and url.scheme is required
-        self.state.metric.req_active.add(1, &[
-            KeyValue::new("http.request.method", req.method().as_str().to_string()),
-            KeyValue::new("url.scheme", url_scheme.clone()),
-        ]);
+        self.state.metric.req_active.add(
+            1,
+            &[
+                KeyValue::new("http.request.method", req.method().as_str().to_string()),
+                KeyValue::new("url.scheme", url_scheme.clone()),
+            ],
+        );
         let start = Instant::now();
         let method = req.method().clone().to_string();
         let path = if let Some(matched_path) = req.extensions().get::<MatchedPath>() {
@@ -502,8 +509,12 @@ where
             "".to_owned()
         };
 
-        let host = req.headers().get(http::header::HOST)
-            .and_then(|h| h.to_str().ok()).unwrap_or("unknown").to_string();
+        let host = req
+            .headers()
+            .get(http::header::HOST)
+            .and_then(|h| h.to_str().ok())
+            .unwrap_or("unknown")
+            .to_string();
 
         let req_size = compute_approximate_request_size(&req);
 
@@ -522,7 +533,6 @@ where
         }
     }
 }
-
 
 /// compute approximate request size
 ///
@@ -557,10 +567,13 @@ where
         let this = self.project();
         let response = ready!(this.inner.poll(cx))?;
 
-        this.state.metric.req_active.add(-1, &[
-            KeyValue::new("http.request.method", this.method.clone()),
-            KeyValue::new("url.scheme", this.url_scheme.clone()),
-        ]);
+        this.state.metric.req_active.add(
+            -1,
+            &[
+                KeyValue::new("http.request.method", this.method.clone()),
+                KeyValue::new("url.scheme", this.url_scheme.clone()),
+            ],
+        );
 
         if (this.state.skipper.skip)(this.path.as_str()) {
             return Poll::Ready(Ok(response));
@@ -578,7 +591,6 @@ where
             },
             KeyValue::new("http.route", this.path.clone()),
             KeyValue::new("http.response.status_code", status),
-
             // server.address: Name of the local HTTP server that received the request.
             // Determined by using the first of the following that applies
             //
@@ -606,8 +618,8 @@ mod tests {
     use axum::extract::State;
     use axum::routing::get;
     use axum::Router;
-    use opentelemetry_sdk::metrics::MeterProvider;
     use opentelemetry::{global, Context, KeyValue};
+    use opentelemetry_sdk::metrics::SdkMeterProvider;
     use prometheus::{Encoder, Registry, TextEncoder};
     use std::sync::Arc;
 
@@ -623,7 +635,7 @@ mod tests {
             .build()
             .unwrap();
 
-        let provider = MeterProvider::builder().with_reader(exporter).build();
+        let provider = SdkMeterProvider::builder().with_reader(exporter).build();
 
         // init the global meter provider
         global::set_meter_provider(provider.clone());
@@ -632,9 +644,9 @@ mod tests {
 
         // Use two instruments
         let counter = meter.u64_counter("a.counter").with_description("Counts things").init();
-        let recorder = meter.i64_histogram("a.histogram").with_description("Records values").init();
+        let recorder = meter.u64_histogram("a.histogram").with_description("Records values").init();
 
-        counter.add( 100, &[KeyValue::new("key", "value")]);
+        counter.add(100, &[KeyValue::new("key", "value")]);
         recorder.record(100, &[KeyValue::new("key", "value")]);
 
         // Encode data as text or protobuf
