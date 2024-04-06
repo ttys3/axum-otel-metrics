@@ -91,7 +91,7 @@ dependencies = [
 
 [[package]]
 name = "axum-otel-metrics"
-version = "0.8.0"
+version = "0.8.1"
 dependencies = [
  "axum",
  "futures-util",
