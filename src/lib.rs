@@ -56,6 +56,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use std::future::Future;
+use std::ops::Deref;
 use std::pin::Pin;
 use std::task::Poll::Ready;
 use std::task::{Context, Poll};
@@ -69,7 +70,7 @@ use opentelemetry::metrics::{Counter, Histogram, UpDownCounter};
 
 use opentelemetry::metrics::{MeterProvider as _, Unit};
 
-use opentelemetry_sdk::metrics::{new_view, Aggregation, Instrument, SdkMeterProvider, Stream};
+use opentelemetry_sdk::metrics::{new_view, Aggregation, Instrument, SdkMeterProvider, Stream, PeriodicReader, reader::{DefaultAggregationSelector, DefaultTemporalitySelector},};
 use opentelemetry_sdk::resource::{EnvResourceDetector, SdkProvidedResourceDetector, TelemetryResourceDetector};
 use opentelemetry_semantic_conventions::resource::{SERVICE_NAME, SERVICE_NAMESPACE, SERVICE_VERSION};
 
@@ -79,6 +80,8 @@ use tower::{Layer, Service};
 
 use futures_util::ready;
 use http_body::Body as httpBody;
+use opentelemetry_otlp::OTEL_EXPORTER_OTLP_TIMEOUT;
+use opentelemetry_prometheus::PrometheusExporter;
 use opentelemetry_sdk::Resource;
 use pin_project_lite::pin_project; // for `Body::size_hint`
                                    // service.instance used by Tencent Cloud TKE APM only, for view application metrics by pod IP
@@ -102,7 +105,7 @@ pub struct Metric {
 #[derive(Clone)]
 pub struct MetricState {
     /// Prometheus Registry we used to gathering and exporting metrics in the export endpoint
-    registry: Registry,
+    registry: Option<Registry>,
 
     /// hold the metrics we used in the middleware
     pub metric: Metric,
@@ -169,11 +172,16 @@ impl HttpMetricsLayer {
     // https://github.com/autometrics-dev/autometrics-rs/blob/d3e7bffeede43f6c77b6a992b0443c0fca34003f/autometrics/src/prometheus_exporter.rs#L10
     pub async fn exporter_handler(state: State<MetricState>) -> impl IntoResponse {
         // tracing::trace!("exporter_handler called");
-        let mut buffer = Vec::new();
-        let encoder = TextEncoder::new();
-        encoder.encode(&state.registry.gather(), &mut buffer).unwrap();
-        // return metrics
-        String::from_utf8(buffer).unwrap()
+        match state.registry {
+            Some(ref registry) => {
+                let mut buffer = Vec::new();
+                let encoder = TextEncoder::new();
+                encoder.encode(&registry.gather(), &mut buffer).unwrap();
+                // return metrics
+                String::from_utf8(buffer).unwrap()
+            }
+            None => "#no prometheus registry".to_string(),
+        }
     }
 }
 
@@ -235,6 +243,7 @@ pub struct HttpMetricsLayerBuilder {
     labels: Option<HashMap<String, String>>,
     skipper: PathSkipper,
     is_tls: bool,
+    exporter: Option<String>,
 }
 
 impl Default for HttpMetricsLayerBuilder {
@@ -247,6 +256,7 @@ impl Default for HttpMetricsLayerBuilder {
             labels: None,
             skipper: PathSkipper::default(),
             is_tls: false,
+            exporter: Some("prometheus".to_string()),
         }
     }
 }
@@ -286,6 +296,11 @@ impl HttpMetricsLayerBuilder {
         self
     }
 
+    pub fn with_exporter(mut self, exporter: String) -> Self {
+        self.exporter = Some(exporter);
+        self
+    }
+
     pub fn build(self) -> HttpMetricsLayer {
         let mut resource = vec![];
 
@@ -299,7 +314,7 @@ impl HttpMetricsLayerBuilder {
             resource.push(KeyValue::new(SERVICE_INSTANCE, instance_ip));
         }
 
-        if let Some(service_name) = self.service_name {
+        if let Some(service_name) = self.service_name.clone() {
             // `foo.ns`
             if !ns.is_empty() && !service_name.starts_with(format!("{}.", &ns).as_str()) {
                 resource.push(KeyValue::new(SERVICE_NAME, format!("{}.{}", service_name, &ns)));
@@ -307,7 +322,7 @@ impl HttpMetricsLayerBuilder {
                 resource.push(KeyValue::new(SERVICE_NAME, service_name));
             }
         }
-        if let Some(service_version) = self.service_version {
+        if let Some(service_version) = self.service_version.clone() {
             resource.push(KeyValue::new(SERVICE_VERSION, service_version));
         }
 
@@ -329,20 +344,21 @@ impl HttpMetricsLayerBuilder {
             res
         };
 
-        let registry = if let Some(prefix) = self.prefix {
-            Registry::new_custom(Some(prefix), self.labels).expect("create prometheus registry")
-        } else {
-            Registry::new()
-        };
-        // init prometheus exporter
-        let exporter = opentelemetry_prometheus::exporter()
-            .with_registry(registry.clone())
-            .build()
-            .unwrap();
+        let mut registry  = None;
+        let mut builder = SdkMeterProvider::builder()
+            .with_resource(res);
 
-        let provider = SdkMeterProvider::builder()
-            .with_resource(res)
-            .with_reader(exporter)
+        // exporter
+
+        if self.exporter == Some("otlp".to_string()) {
+            builder = builder.with_reader(self.build_otlp());
+        } else {
+            let (reg, exporter) = self.build_prometheus();
+            registry = Some(reg);
+            builder = builder.with_reader(exporter);
+        }
+
+        let provider = builder
             .with_view(
                 new_view(
                     Instrument::new().name("*http.server.request.duration"),
@@ -430,6 +446,56 @@ impl HttpMetricsLayerBuilder {
             state: meter_state,
             path: self.path,
         }
+    }
+
+    fn build_prometheus(&self) -> (Registry, impl opentelemetry_sdk::metrics::reader::MetricReader) {
+        let registry = if let Some(prefix) = self.prefix.clone() {
+            Registry::new_custom(Some(prefix), self.labels.clone()).expect("create prometheus registry")
+        } else {
+            Registry::new()
+        };
+        // init prometheus exporter
+        let exporter = opentelemetry_prometheus::exporter()
+            .with_registry(registry.clone())
+            .build()
+            .unwrap();
+        (registry, exporter)
+    }
+
+    /// ref https://github.com/tokio-rs/tracing-opentelemetry/blob/5e3354ec24debcfbf856bfd1eb7022459dca1e6a/examples/opentelemetry-otlp.rs#L32
+    fn build_otlp(&self) -> impl opentelemetry_sdk::metrics::reader::MetricReader {
+        // init otlp metrics exporter
+        // read from env var:
+        /// OTEL_EXPORTER_OTLP_METRICS_ENDPOINT, OTEL_EXPORTER_OTLP_METRICS_HEADERS,OTEL_EXPORTER_OTLP_METRICS_TIMEOUT
+
+        let protocol = match env::var("OTEL_EXPORTER_OTLP_METRICS_PROTOCOL")
+            .ok()
+            .or(env::var("OTEL_EXPORTER_OTLP_PROTOCOL").ok())
+        {
+            Some(val) => val,
+            None => "http/protobuf".to_string(),
+        };
+
+        let exporter = if protocol.starts_with("http") {
+            opentelemetry_otlp::new_exporter()
+                .http()
+                .build_metrics_exporter(
+                    Box::new(DefaultAggregationSelector::new()),
+                    Box::new(DefaultTemporalitySelector::new()),
+                ).unwrap()
+        } else {
+            opentelemetry_otlp::new_exporter()
+                .tonic()
+                .build_metrics_exporter(
+                    Box::new(DefaultAggregationSelector::new()),
+                    Box::new(DefaultTemporalitySelector::new()),
+                ).unwrap()
+        };
+
+        let reader = PeriodicReader::builder(exporter, opentelemetry_sdk::runtime::Tokio)
+            .with_interval(std::time::Duration::from_secs(30))
+            .build();
+        reader
     }
 }
 
