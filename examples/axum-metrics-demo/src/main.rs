@@ -33,6 +33,7 @@ async fn main() {
         // .with_prefix("axum_metrics_demo".to_string())
         .with_labels(vec![("env".to_string(), "dev".to_string())].into_iter().collect())
         .with_skipper(PathSkipper::new(|s| s.starts_with("/skip")))
+        .with_exporter("otlp".into())
         .build();
 
     let state = SharedState {

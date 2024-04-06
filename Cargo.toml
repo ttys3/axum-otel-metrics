@@ -1,6 +1,6 @@
 [package]
 name = "axum-otel-metrics"
-version = "0.8.1"
+version = "0.9.0-alpha.1"
 edition = "2021"
 license = "MIT"
 description = "axum OpenTelemetry metrics middleware with prometheus exporter"
@@ -28,7 +28,7 @@ futures-util = "0.3.30"
 pin-project-lite = "0.2.14"
 http = "1.1.0"
 http-body = "1.0.0"
-opentelemetry-otlp = { version = "0.15.0", features = ["metrics", "http-proto"] }
+opentelemetry-otlp = { version = "0.15.0", features = ["metrics", "http-proto", "reqwest-client"] }
 opentelemetry-http = "0.11.1"
 
 
