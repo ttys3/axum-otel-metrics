@@ -175,7 +175,7 @@ dependencies = [
  "opentelemetry-otlp",
  "opentelemetry-prometheus",
  "opentelemetry-semantic-conventions",
- "opentelemetry_sdk 0.22.1",
+ "opentelemetry_sdk 0.23.0",
  "pin-project-lite",
  "prometheus",
  "tokio",
@@ -827,8 +827,6 @@ dependencies = [
  "percent-encoding",
  "rand",
  "thiserror",
- "tokio",
- "tokio-stream",
 ]
 
 [[package]]
@@ -846,7 +844,11 @@ dependencies = [
  "once_cell",
  "opentelemetry 0.23.0",
  "ordered-float",
+ "percent-encoding",
+ "rand",
  "thiserror",
+ "tokio",
+ "tokio-stream",
 ]
 
 [[package]]
