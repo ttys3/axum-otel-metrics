@@ -17,7 +17,7 @@ axum = "0.7"
 opentelemetry = { version = "0.23", features = ["metrics"] }
 opentelemetry_sdk = { version = "0.23.0", features = ["rt-tokio"] }
 opentelemetry-prometheus = { version = "0.16.0", features = ["prometheus-encoding"] }
-opentelemetry-semantic-conventions = { version = "0.14.0"}
+opentelemetry-semantic-conventions = { version = "0.15.0"}
 #opentelemetry = { git = "https://github.com/open-telemetry/opentelemetry-rust.git", branch = "main", features = ["metrics", "rt-tokio"]}
 #opentelemetry-prometheus = { git = "https://github.com/open-telemetry/opentelemetry-rust.git", branch = "main", features = ["prometheus-encoding"] }
 #opentelemetry-semantic-conventions = { git = "https://github.com/open-telemetry/opentelemetry-rust.git", branch = "main"}
