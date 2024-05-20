@@ -22,7 +22,7 @@ opentelemetry-semantic-conventions = { version = "0.14.0"}
 #opentelemetry-prometheus = { git = "https://github.com/open-telemetry/opentelemetry-rust.git", branch = "main", features = ["prometheus-encoding"] }
 #opentelemetry-semantic-conventions = { git = "https://github.com/open-telemetry/opentelemetry-rust.git", branch = "main"}
 
-prometheus = "0.13.3"
+prometheus = "0.13.4"
 tower = "0.4.13"
 futures-util = "0.3.30"
 pin-project-lite = "0.2.14"
