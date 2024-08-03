@@ -56,7 +56,6 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use std::future::Future;
-use std::ops::Deref;
 use std::pin::Pin;
 use std::task::Poll::Ready;
 use std::task::{Context, Poll};
@@ -68,7 +67,7 @@ use opentelemetry::{Key, KeyValue, Value};
 
 use opentelemetry::metrics::{Counter, Histogram, UpDownCounter};
 
-use opentelemetry::metrics::{MeterProvider as _, Unit};
+use opentelemetry::metrics::{MeterProvider as _};
 
 use opentelemetry_sdk::metrics::{new_view, Aggregation, Instrument, SdkMeterProvider, Stream, PeriodicReader, reader::{DefaultAggregationSelector, DefaultTemporalitySelector},};
 use opentelemetry_sdk::resource::{EnvResourceDetector, SdkProvidedResourceDetector, TelemetryResourceDetector};
@@ -80,8 +79,6 @@ use tower::{Layer, Service};
 
 use futures_util::ready;
 use http_body::Body as httpBody;
-use opentelemetry_otlp::OTEL_EXPORTER_OTLP_TIMEOUT;
-use opentelemetry_prometheus::PrometheusExporter;
 use opentelemetry_sdk::Resource;
 use pin_project_lite::pin_project; // for `Body::size_hint`
                                    // service.instance used by Tencent Cloud TKE APM only, for view application metrics by pod IP
@@ -406,20 +403,20 @@ impl HttpMetricsLayerBuilder {
         // request_duration_seconds
         let req_duration = meter
             .f64_histogram("http.server.request.duration")
-            .with_unit(Unit::new("s"))
+            .with_unit("s")
             .with_description("The HTTP request latencies in seconds.")
             .init();
 
         // request_size_bytes
         let req_size = meter
             .u64_histogram("http.server.request.size")
-            .with_unit(Unit::new("By"))
+            .with_unit("By")
             .with_description("The HTTP request sizes in bytes.")
             .init();
 
         let res_size = meter
             .u64_histogram("http.server.response.size")
-            .with_unit(Unit::new("By"))
+            .with_unit("By")
             .with_description("The HTTP reponse sizes in bytes.")
             .init();
 
@@ -462,12 +459,11 @@ impl HttpMetricsLayerBuilder {
         (registry, exporter)
     }
 
+    /// init otlp metrics exporter
+    /// read from env var:
+    /// OTEL_EXPORTER_OTLP_METRICS_ENDPOINT, OTEL_EXPORTER_OTLP_METRICS_HEADERS,OTEL_EXPORTER_OTLP_METRICS_TIMEOUT
     /// ref https://github.com/tokio-rs/tracing-opentelemetry/blob/5e3354ec24debcfbf856bfd1eb7022459dca1e6a/examples/opentelemetry-otlp.rs#L32
     fn build_otlp(&self) -> impl opentelemetry_sdk::metrics::reader::MetricReader {
-        // init otlp metrics exporter
-        // read from env var:
-        /// OTEL_EXPORTER_OTLP_METRICS_ENDPOINT, OTEL_EXPORTER_OTLP_METRICS_HEADERS,OTEL_EXPORTER_OTLP_METRICS_TIMEOUT
-
         let protocol = match env::var("OTEL_EXPORTER_OTLP_METRICS_PROTOCOL")
             .ok()
             .or(env::var("OTEL_EXPORTER_OTLP_PROTOCOL").ok())
