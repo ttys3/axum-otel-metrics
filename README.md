@@ -40,9 +40,9 @@ http_server_request_size_bytes_count
 
 `http_server_response_size_bytes_` **histogram**
 ```
-http_server_response_size_bytes__bucket
-http_server_response_size_bytes__sum
-http_server_response_size_bytes__count
+http_server_response_size_bytes_bucket
+http_server_response_size_bytes_sum
+http_server_response_size_bytes_count
 ```
 
 labels for `requests_total`,
