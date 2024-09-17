@@ -16,7 +16,7 @@ axum = "0.7.5"
 opentelemetry = { version = "0.24", features = ["metrics"] }
 opentelemetry-semantic-conventions = { version = "0.16.0"}
 
-tower = "0.4.13"
+tower = "0.5.1"
 futures-util = "0.3.30"
 pin-project-lite = "0.2.14"
 #http = "1.1.0"
