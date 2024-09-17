@@ -9,8 +9,6 @@
 //!     .build();
 //!
 //! let app = Router::<()>::new()
-//!     // export metrics at `/metrics` endpoint
-//!     .merge(metrics.routes())
 //!     .route("/", get(handler))
 //!     .route("/hello", get(handler))
 //!     .route("/world", get(handler))
@@ -35,8 +33,6 @@
 //! .build();
 //!
 //! let app = Router::<()>::new()
-//!     // export metrics at `/metrics` endpoint
-//!     .merge(metrics.routes())
 //!     .route("/", get(handler))
 //!     .route("/hello", get(handler))
 //!     .route("/world", get(handler))
@@ -47,185 +43,85 @@
 //!     Html("<h1>Hello, World!</h1>")
 //! }
 //! ```
-
 use axum::http::Response;
-use axum::{extract::MatchedPath, extract::State, http::Request, response::IntoResponse, routing::get, Router};
-use std::collections::HashMap;
-use std::env;
+use axum::{extract::MatchedPath, http, http::Request};
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::Instant;
 
 use std::future::Future;
 use std::pin::Pin;
-use std::task::Poll::Ready;
-use std::task::{Context, Poll};
-use std::time::Instant;
+use std::task::Poll::{self, Ready};
+use std::task::{Context};
 
-use prometheus::{Encoder, Registry, TextEncoder};
-
-use opentelemetry::{Key, KeyValue, Value};
-
-use opentelemetry::metrics::{Counter, Histogram, UpDownCounter};
-
-use opentelemetry::metrics::{MeterProvider as _};
-
-use opentelemetry_sdk::metrics::{new_view, Aggregation, Instrument, SdkMeterProvider, Stream, PeriodicReader, reader::{DefaultAggregationSelector, DefaultTemporalitySelector},};
-use opentelemetry_sdk::resource::{EnvResourceDetector, SdkProvidedResourceDetector, TelemetryResourceDetector};
-use opentelemetry_semantic_conventions::resource::{SERVICE_NAME, SERVICE_NAMESPACE, SERVICE_VERSION};
-
-use opentelemetry::global;
+use opentelemetry::{global, metrics::{Counter, Histogram, UpDownCounter}, KeyValue};
 
 use tower::{Layer, Service};
 
 use futures_util::ready;
-use http_body::Body as httpBody;
-use opentelemetry_sdk::Resource;
-use pin_project_lite::pin_project; // for `Body::size_hint`
-                                   // service.instance used by Tencent Cloud TKE APM only, for view application metrics by pod IP
-const SERVICE_INSTANCE: Key = Key::from_static_str("service.instance");
+use http_body::Body as HttpBody;
+use pin_project_lite::pin_project;
 
-/// the metrics we used in the middleware
+/// The metrics we use in the middleware.
 #[derive(Clone)]
 pub struct Metric {
     pub requests_total: Counter<u64>,
-
-    // before opentelemetry 0.18.0, Histogram called ValueRecorder
     pub req_duration: Histogram<f64>,
-
     pub req_size: Histogram<u64>,
-
     pub res_size: Histogram<u64>,
-
     pub req_active: UpDownCounter<i64>,
 }
 
 #[derive(Clone)]
 pub struct MetricState {
-    /// Prometheus Registry we used to gathering and exporting metrics in the export endpoint
-    registry: Option<Registry>,
-
-    /// hold the metrics we used in the middleware
+    /// Holds the metrics we use in the middleware.
     pub metric: Metric,
 
-    /// PathSkipper used to skip some paths for not recording metrics
+    /// PathSkipper used to skip some paths for not recording metrics.
     skipper: PathSkipper,
 
-    /// whether the service is running as a TLS server or not.
-    /// this is used to help determine the `url.scheme` otel meter attribute.
-    /// because there is no way to get the scheme from the request in http server
-    /// (except for absolute uri request, but which is only used when as a proxy server).
+    /// Whether the service is running as a TLS server or not.
+    /// This is used to help determine the `url.scheme` OpenTelemetry meter attribute.
     is_tls: bool,
 }
 
-/// the service wrapper
+/// The service wrapper.
 #[derive(Clone)]
 pub struct HttpMetrics<S> {
     pub(crate) state: MetricState,
 
-    /// inner service which is wrapped by this middleware
+    /// Inner service which is wrapped by this middleware.
     service: S,
 }
 
 #[derive(Clone)]
 pub struct HttpMetricsLayer {
-    /// the metric state, use both by the middleware handler and metrics export endpoint
+    /// The metric state, used by the middleware handler.
     pub(crate) state: MetricState,
-    path: String,
 }
 
-// TODO support custom buckets
-// allocation not allowed in statics: static HTTP_REQ_DURATION_HISTOGRAM_BUCKETS: Vec<f64> = vec![0, 0.005, 0.01, 0.025, 0.05, 0.075, 0.1, 0.25, 0.5, 0.75, 1, 2.5, 5, 7.5, 10];
-// as https://github.com/open-telemetry/semantic-conventions/blob/main/docs/http/http-metrics.md#metric-httpserverrequestduration spec
-// This metric SHOULD be specified with ExplicitBucketBoundaries of [ 0, 0.005, 0.01, 0.025, 0.05, 0.075, 0.1, 0.25, 0.5, 0.75, 1, 2.5, 5, 7.5, 10 ].
-// the unit of the buckets is second
-const HTTP_REQ_DURATION_HISTOGRAM_BUCKETS: &[f64] = &[
-    0.0, 0.005, 0.01, 0.025, 0.05, 0.075, 0.1, 0.25, 0.5, 0.75, 1.0, 2.5, 5.0, 7.5, 10.0,
-];
-
-const KB: f64 = 1024.0;
-const MB: f64 = 1024.0 * KB;
-
-const HTTP_REQ_SIZE_HISTOGRAM_BUCKETS: &[f64] = &[
-    1.0 * KB,   // 1 KB
-    2.0 * KB,   // 2 KB
-    5.0 * KB,   // 5 KB
-    10.0 * KB,  // 10 KB
-    100.0 * KB, // 100 KB
-    500.0 * KB, // 500 KB
-    1.0 * MB,   // 1 MB
-    2.5 * MB,   // 2 MB
-    5.0 * MB,   // 5 MB
-    10.0 * MB,  // 10 MB
-];
-
-impl HttpMetricsLayer {
-    pub fn routes<S>(&self) -> Router<S> {
-        Router::new()
-            .route(self.path.as_str(), get(Self::exporter_handler))
-            .with_state(self.state.clone())
-    }
-
-    // TODO use a static global exporter like autometrics-rs?
-    // https://github.com/autometrics-dev/autometrics-rs/blob/d3e7bffeede43f6c77b6a992b0443c0fca34003f/autometrics/src/prometheus_exporter.rs#L10
-    pub async fn exporter_handler(state: State<MetricState>) -> impl IntoResponse {
-        // tracing::trace!("exporter_handler called");
-        match state.registry {
-            Some(ref registry) => {
-                let mut buffer = Vec::new();
-                let encoder = TextEncoder::new();
-                encoder.encode(&registry.gather(), &mut buffer).unwrap();
-                // return metrics
-                String::from_utf8(buffer).unwrap()
-            }
-            None => "#no prometheus registry".to_string(),
-        }
-    }
-}
-
-/// A helper that instructs the metrics layer to ignore
-/// certain paths.
-///
-/// The [HttpMetricsLayerBuilder] uses this helper during the
-/// construction of the [HttpMetricsLayer] that will be called
-/// by Axum / Hyper / Tower when a request comes in.
+/// A helper that instructs the metrics layer to ignore certain paths.
 #[derive(Clone)]
 pub struct PathSkipper {
     skip: Arc<dyn Fn(&str) -> bool + 'static + Send + Sync>,
 }
 
 impl PathSkipper {
-    /// Returns a [PathSkipper] that skips recording metrics
-    /// for requests whose path, when passed to `fn`, returns
-    /// `true`.
-    ///
-    /// Only static functions are accepted -- callables such
-    /// as closures that capture their surrounding context will
-    /// not work here.  For a variant that works, consult the
-    /// [PathSkipper::new_with_fn] method.
+    /// Returns a `PathSkipper` that skips recording metrics
+    /// for requests whose path, when passed to `fn`, returns `true`.
     pub fn new(skip: fn(&str) -> bool) -> Self {
-        Self { skip: Arc::new(skip) }
+        Self {
+            skip: Arc::new(skip),
+        }
     }
 
-    /// Dynamic variant of [PathSkipper::new].
-    ///
-    /// This variant requires the callable to be wrapped in an
-    /// [Arc] but, in exchange for this requirement, the caller
-    /// can use closures that capture variables from their context.
-    ///
-    /// The callable argument *must be thread-safe*.  You, as
-    /// the implementor and user of this code, have that
-    /// responsibility.
+    /// Dynamic variant of `PathSkipper::new`.
     pub fn new_with_fn(skip: Arc<dyn Fn(&str) -> bool + 'static + Send + Sync>) -> Self {
-        Self { skip: skip }
+        Self { skip }
     }
 }
 
 impl Default for PathSkipper {
-    /// Returns a `PathSkipper` that skips any path which
-    /// starts with `/metrics` or `/favicon.ico``.
-    ///
-    /// This is the default implementation used when
-    /// building an HttpMetricsLayerBuilder from scratch.
+    /// Returns a `PathSkipper` that skips any path which starts with `/metrics` or `/favicon.ico`.
     fn default() -> Self {
         Self::new(|s| s.starts_with("/metrics") || s.starts_with("/favicon.ico"))
     }
@@ -236,11 +132,9 @@ pub struct HttpMetricsLayerBuilder {
     service_name: Option<String>,
     service_version: Option<String>,
     prefix: Option<String>,
-    path: String,
-    labels: Option<HashMap<String, String>>,
+    labels: Option<std::collections::HashMap<String, String>>,
     skipper: PathSkipper,
     is_tls: bool,
-    exporter: Option<String>,
 }
 
 impl Default for HttpMetricsLayerBuilder {
@@ -249,11 +143,9 @@ impl Default for HttpMetricsLayerBuilder {
             service_name: None,
             service_version: None,
             prefix: None,
-            path: "/metrics".to_string(),
             labels: None,
             skipper: PathSkipper::default(),
             is_tls: false,
-            exporter: Some("prometheus".to_string()),
         }
     }
 }
@@ -278,136 +170,35 @@ impl HttpMetricsLayerBuilder {
         self
     }
 
-    pub fn with_path(mut self, path: String) -> Self {
-        self.path = path;
-        self
-    }
-
-    pub fn with_labels(mut self, labels: HashMap<String, String>) -> Self {
+    pub fn with_labels(mut self, labels: std::collections::HashMap<String, String>) -> Self {
         self.labels = Some(labels);
         self
     }
-
     pub fn with_skipper(mut self, skipper: PathSkipper) -> Self {
         self.skipper = skipper;
         self
     }
 
-    pub fn with_exporter(mut self, exporter: String) -> Self {
-        self.exporter = Some(exporter);
+    pub fn with_tls(mut self, is_tls: bool) -> Self {
+        self.is_tls = is_tls;
         self
     }
 
     pub fn build(self) -> HttpMetricsLayer {
-        let mut resource = vec![];
+        let meter = global::meter("axum-app");
 
-        let ns = env::var("INSTANCE_NAMESPACE").unwrap_or_default();
-        if !ns.is_empty() {
-            resource.push(KeyValue::new(SERVICE_NAMESPACE, ns.clone()));
-        }
-
-        let instance_ip = env::var("INSTANCE_IP").unwrap_or_default();
-        if !instance_ip.is_empty() {
-            resource.push(KeyValue::new(SERVICE_INSTANCE, instance_ip));
-        }
-
-        if let Some(service_name) = self.service_name.clone() {
-            // `foo.ns`
-            if !ns.is_empty() && !service_name.starts_with(format!("{}.", &ns).as_str()) {
-                resource.push(KeyValue::new(SERVICE_NAME, format!("{}.{}", service_name, &ns)));
-            } else {
-                resource.push(KeyValue::new(SERVICE_NAME, service_name));
-            }
-        }
-        if let Some(service_version) = self.service_version.clone() {
-            resource.push(KeyValue::new(SERVICE_VERSION, service_version));
-        }
-
-        let res = Resource::from_detectors(
-            Duration::from_secs(6),
-            vec![
-                // set service.name from env OTEL_SERVICE_NAME > env OTEL_RESOURCE_ATTRIBUTES > option_env! CARGO_BIN_NAME > unknown_service
-                Box::new(SdkProvidedResourceDetector),
-                // detect res from env OTEL_RESOURCE_ATTRIBUTES (resources string like key1=value1,key2=value2,...)
-                Box::new(EnvResourceDetector::new()),
-                // set telemetry.sdk.{name, language, version}
-                Box::new(TelemetryResourceDetector),
-            ],
-        );
-
-        let res = if !resource.is_empty() {
-            res.merge(&mut Resource::new(resource))
-        } else {
-            res
-        };
-
-        let mut registry  = None;
-        let mut builder = SdkMeterProvider::builder()
-            .with_resource(res);
-
-        // exporter
-
-        if self.exporter == Some("otlp".to_string()) {
-            builder = builder.with_reader(self.build_otlp());
-        } else {
-            let (reg, exporter) = self.build_prometheus();
-            registry = Some(reg);
-            builder = builder.with_reader(exporter);
-        }
-
-        let provider = builder
-            .with_view(
-                new_view(
-                    Instrument::new().name("*http.server.request.duration"),
-                    Stream::new().aggregation(Aggregation::ExplicitBucketHistogram {
-                        boundaries: HTTP_REQ_DURATION_HISTOGRAM_BUCKETS.to_vec(),
-                        record_min_max: true,
-                    }),
-                )
-                .unwrap(),
-            )
-            .with_view(
-                new_view(
-                    Instrument::new().name("*http.server.request.size"),
-                    Stream::new().aggregation(Aggregation::ExplicitBucketHistogram {
-                        boundaries: HTTP_REQ_SIZE_HISTOGRAM_BUCKETS.to_vec(),
-                        record_min_max: true,
-                    }),
-                )
-                .unwrap(),
-            )
-            .with_view(
-                new_view(
-                    Instrument::new().name("*http.server.response.size"),
-                    Stream::new().aggregation(Aggregation::ExplicitBucketHistogram {
-                        boundaries: HTTP_REQ_SIZE_HISTOGRAM_BUCKETS.to_vec(),
-                        record_min_max: true,
-                    }),
-                )
-                .unwrap(),
-            )
-            .build();
-
-        // init the global meter provider
-        global::set_meter_provider(provider.clone());
-        // this must called after the global meter provider has ben initialized
-        // let meter = global::meter("axum-app");
-        let meter = provider.meter("axum-app");
-
-        // requests_total
+        // Initialize metrics.
         let requests_total = meter
             .u64_counter("requests")
             .with_description("How many HTTP requests processed, partitioned by status code and HTTP method.")
             .init();
 
-        // request_duration_seconds
         let req_duration = meter
             .f64_histogram("http.server.request.duration")
             .with_unit("s")
             .with_description("The HTTP request latencies in seconds.")
             .init();
 
-        // request_size_bytes
         let req_size = meter
             .u64_histogram("http.server.request.size")
             .with_unit("By")
@@ -417,17 +208,15 @@ impl HttpMetricsLayerBuilder {
         let res_size = meter
             .u64_histogram("http.server.response.size")
             .with_unit("By")
-            .with_description("The HTTP reponse sizes in bytes.")
+            .with_description("The HTTP response sizes in bytes.")
             .init();
 
-        // no u64_up_down_counter because up_down_counter maybe < 0 since it allow negative values
         let req_active = meter
             .i64_up_down_counter("http.server.active_requests")
             .with_description("The number of active HTTP requests.")
             .init();
 
-        let meter_state = MetricState {
-            registry,
+        let metric_state = MetricState {
             metric: Metric {
                 requests_total,
                 req_duration,
@@ -440,58 +229,8 @@ impl HttpMetricsLayerBuilder {
         };
 
         HttpMetricsLayer {
-            state: meter_state,
-            path: self.path,
+            state: metric_state,
         }
-    }
-
-    fn build_prometheus(&self) -> (Registry, impl opentelemetry_sdk::metrics::reader::MetricReader) {
-        let registry = if let Some(prefix) = self.prefix.clone() {
-            Registry::new_custom(Some(prefix), self.labels.clone()).expect("create prometheus registry")
-        } else {
-            Registry::new()
-        };
-        // init prometheus exporter
-        let exporter = opentelemetry_prometheus::exporter()
-            .with_registry(registry.clone())
-            .build()
-            .unwrap();
-        (registry, exporter)
-    }
-
-    /// init otlp metrics exporter
-    /// read from env var:
-    /// OTEL_EXPORTER_OTLP_METRICS_ENDPOINT, OTEL_EXPORTER_OTLP_METRICS_HEADERS,OTEL_EXPORTER_OTLP_METRICS_TIMEOUT
-    /// ref https://github.com/tokio-rs/tracing-opentelemetry/blob/5e3354ec24debcfbf856bfd1eb7022459dca1e6a/examples/opentelemetry-otlp.rs#L32
-    fn build_otlp(&self) -> impl opentelemetry_sdk::metrics::reader::MetricReader {
-        let protocol = match env::var("OTEL_EXPORTER_OTLP_METRICS_PROTOCOL")
-            .ok()
-            .or(env::var("OTEL_EXPORTER_OTLP_PROTOCOL").ok())
-        {
-            Some(val) => val,
-            None => "http/protobuf".to_string(),
-        };
-
-        let exporter = if protocol.starts_with("http") {
-            opentelemetry_otlp::new_exporter()
-                .http()
-                .build_metrics_exporter(
-                    Box::new(DefaultAggregationSelector::new()),
-                    Box::new(DefaultTemporalitySelector::new()),
-                ).unwrap()
-        } else {
-            opentelemetry_otlp::new_exporter()
-                .tonic()
-                .build_metrics_exporter(
-                    Box::new(DefaultAggregationSelector::new()),
-                    Box::new(DefaultTemporalitySelector::new()),
-                ).unwrap()
-        };
-
-        let reader = PeriodicReader::builder(exporter, opentelemetry_sdk::runtime::Tokio)
-            .with_interval(std::time::Duration::from_secs(30))
-            .build();
-        reader
     }
 }
 
@@ -524,7 +263,7 @@ pin_project! {
 impl<S, R, ResBody> Service<Request<R>> for HttpMetrics<S>
 where
     S: Service<Request<R>, Response = Response<ResBody>>,
-    ResBody: httpBody,
+    ResBody: HttpBody,
 {
     type Response = S::Response;
     type Error = S::Error;
@@ -544,7 +283,7 @@ where
                 } else if let Some(scheme) = req.headers().get("X-Forwarded-Protocol") {
                     return scheme.to_str().unwrap().to_string();
                 }
-                if req.headers().get("X-Forwarded-Ssl").is_some().to_string() == "on" {
+                if req.headers().get("X-Forwarded-Ssl").map(|v| v.to_str().unwrap()) == Some("on") {
                     return "https".to_string();
                 }
                 if let Some(scheme) = req.headers().get("X-Url-Scheme") {
@@ -554,8 +293,8 @@ where
                 }
             })()
         };
-        // ref https://github.com/open-telemetry/semantic-conventions/blob/main/docs/http/http-metrics.md#metric-httpserveractive_requests
-        // http.request.method and url.scheme is required
+
+        // Record active requests.
         self.state.metric.req_active.add(
             1,
             &[
@@ -563,6 +302,7 @@ where
                 KeyValue::new("url.scheme", url_scheme.clone()),
             ],
         );
+
         let start = Instant::now();
         let method = req.method().clone().to_string();
         let path = if let Some(matched_path) = req.extensions().get::<MatchedPath>() {
@@ -580,9 +320,6 @@ where
 
         let req_size = compute_approximate_request_size(&req);
 
-        // for scheme, see github.com/labstack/echo/v4@v4.11.1/context.go
-        // we can not use req.uri().scheme() since for non-absolute uri, it is always None
-
         ResponseFuture {
             inner: self.service.call(req),
             start,
@@ -596,9 +333,7 @@ where
     }
 }
 
-/// compute approximate request size
-///
-/// the implimentation refs [labstack/echo-contrib 's prometheus middleware](https://github.com/labstack/echo-contrib/blob/db8911a1af7abb6bdafbd999adada548fd9c0849/echoprometheus/prometheus.go#L329)
+/// Compute approximate request size.
 fn compute_approximate_request_size<T>(req: &Request<T>) -> usize {
     let mut s = 0;
     s += req.uri().path().len();
@@ -619,7 +354,7 @@ fn compute_approximate_request_size<T>(req: &Request<T>) -> usize {
     s
 }
 
-impl<F, B: httpBody, E> Future for ResponseFuture<F>
+impl<F, B: HttpBody, E> Future for ResponseFuture<F>
 where
     F: Future<Output = Result<Response<B>, E>>,
 {
@@ -629,6 +364,7 @@ where
         let this = self.project();
         let response = ready!(this.inner.poll(cx))?;
 
+        // Decrease active requests.
         this.state.metric.req_active.add(
             -1,
             &[
@@ -647,134 +383,17 @@ where
         let res_size = response.body().size_hint().upper().unwrap_or(0);
 
         let labels = [
-            KeyValue {
-                key: Key::from("http.request.method"),
-                value: Value::from(this.method.clone()),
-            },
+            KeyValue::new("http.request.method", this.method.clone()),
             KeyValue::new("http.route", this.path.clone()),
             KeyValue::new("http.response.status_code", status),
-            // server.address: Name of the local HTTP server that received the request.
-            // Determined by using the first of the following that applies
-            //
-            // 1. The primary server name of the matched virtual host. MUST only include host identifier.
-            // 2. Host identifier of the request target if it's sent in absolute-form.
-            // 3. Host identifier of the Host header
             KeyValue::new("server.address", this.host.clone()),
         ];
 
         this.state.metric.requests_total.add(1, &labels);
-
         this.state.metric.req_size.record(*this.req_size, &labels);
-
         this.state.metric.res_size.record(res_size, &labels);
-
         this.state.metric.req_duration.record(latency, &labels);
 
         Ready(Ok(response))
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::HttpMetricsLayerBuilder;
-    use axum::extract::State;
-    use axum::routing::get;
-    use axum::Router;
-    use opentelemetry::{global, Context, KeyValue};
-    use opentelemetry_sdk::metrics::SdkMeterProvider;
-    use prometheus::{Encoder, Registry, TextEncoder};
-    use std::sync::Arc;
-
-    #[test]
-    fn test_prometheus_exporter() {
-        let _cx = Context::current();
-
-        let registry = Registry::new();
-
-        // init prometheus exporter
-        let exporter = opentelemetry_prometheus::exporter()
-            .with_registry(registry.clone())
-            .build()
-            .unwrap();
-
-        let provider = SdkMeterProvider::builder().with_reader(exporter).build();
-
-        // init the global meter provider
-        global::set_meter_provider(provider.clone());
-
-        let meter = global::meter("my-app");
-
-        // Use two instruments
-        let counter = meter.u64_counter("a.counter").with_description("Counts things").init();
-        let recorder = meter.u64_histogram("a.histogram").with_description("Records values").init();
-
-        counter.add(100, &[KeyValue::new("key", "value")]);
-        recorder.record(100, &[KeyValue::new("key", "value")]);
-
-        // Encode data as text or protobuf
-        let encoder = TextEncoder::new();
-        let metric_families = registry.gather();
-        let mut result = Vec::new();
-        encoder.encode(&metric_families, &mut result).expect("encode failed");
-        println!("{}", String::from_utf8(result).unwrap());
-    }
-
-    #[test]
-    fn test_builder() {
-        let metrics = HttpMetricsLayerBuilder::new().build();
-        let _app = Router::new()
-            // export metrics at `/metrics` endpoint
-            .merge(metrics.routes::<()>())
-            .route("/", get(handler))
-            .route("/hello", get(handler))
-            .route("/world", get(handler))
-            // add the metrics middleware
-            .layer(metrics);
-
-        async fn handler() -> &'static str {
-            "<h1>Hello, World!</h1>"
-        }
-    }
-
-    #[test]
-    fn test_builder_with_state_router() {
-        #[derive(Clone)]
-        struct AppState {}
-
-        let metrics = HttpMetricsLayerBuilder::new().build();
-        let _app: Router<AppState> = Router::new()
-            // export metrics at `/metrics` endpoint
-            .merge(metrics.routes::<AppState>())
-            .route("/", get(handler))
-            .route("/hello", get(handler))
-            .route("/world", get(handler))
-            // add the metrics middleware
-            .layer(metrics)
-            .with_state(AppState {});
-
-        async fn handler(_state: State<AppState>) -> &'static str {
-            "<h1>Hello, World!</h1>"
-        }
-    }
-
-    #[test]
-    fn test_builder_with_arced_skipper() {
-        #[derive(Clone)]
-        struct AppState {}
-
-        let metrics = HttpMetricsLayerBuilder::new()
-            .with_skipper(crate::PathSkipper::new_with_fn(Arc::new(|_: &str| true)))
-            .build();
-        let _app: Router<AppState> = Router::new()
-            // export metrics at `/metrics` endpoint
-            .merge(metrics.routes::<AppState>())
-            .route("/", get(handler))
-            // add the metrics middleware
-            .layer(metrics)
-            .with_state(AppState {});
-
-        async fn handler(_state: State<AppState>) -> &'static str {
-            "<h1>Hello, World!</h1>"
-        }
     }
 }
