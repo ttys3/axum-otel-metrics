@@ -82,6 +82,9 @@ pub struct MetricState {
     /// Whether the service is running as a TLS server or not.
     /// This is used to help determine the `url.scheme` OpenTelemetry meter attribute.
     is_tls: bool,
+
+    /// Additional labels to include with each metric.
+    labels: Vec<KeyValue>,
 }
 
 /// The service wrapper.
@@ -129,10 +132,8 @@ impl Default for PathSkipper {
 
 #[derive(Clone)]
 pub struct HttpMetricsLayerBuilder {
-    service_name: Option<String>,
-    service_version: Option<String>,
     prefix: Option<String>,
-    labels: Option<std::collections::HashMap<String, String>>,
+    labels: Vec<KeyValue>,
     skipper: PathSkipper,
     is_tls: bool,
 }
@@ -140,10 +141,8 @@ pub struct HttpMetricsLayerBuilder {
 impl Default for HttpMetricsLayerBuilder {
     fn default() -> Self {
         Self {
-            service_name: None,
-            service_version: None,
             prefix: None,
-            labels: None,
+            labels: Vec::new(),
             skipper: PathSkipper::default(),
             is_tls: false,
         }
@@ -155,15 +154,6 @@ impl HttpMetricsLayerBuilder {
         HttpMetricsLayerBuilder::default()
     }
 
-    pub fn with_service_name(mut self, service_name: String) -> Self {
-        self.service_name = Some(service_name);
-        self
-    }
-
-    pub fn with_service_version(mut self, service_version: String) -> Self {
-        self.service_version = Some(service_version);
-        self
-    }
 
     pub fn with_prefix(mut self, prefix: String) -> Self {
         self.prefix = Some(prefix);
@@ -171,7 +161,10 @@ impl HttpMetricsLayerBuilder {
     }
 
     pub fn with_labels(mut self, labels: std::collections::HashMap<String, String>) -> Self {
-        self.labels = Some(labels);
+        self.labels = labels
+            .into_iter()
+            .map(|(k, v)| KeyValue::new(k, v))
+            .collect();
         self
     }
     pub fn with_skipper(mut self, skipper: PathSkipper) -> Self {
@@ -224,6 +217,7 @@ impl HttpMetricsLayerBuilder {
                 res_size,
                 req_active,
             },
+            labels: self.labels,
             skipper: self.skipper,
             is_tls: self.is_tls,
         };
@@ -295,12 +289,14 @@ where
         };
 
         // Record active requests.
+        let mut active_labels = vec![
+            KeyValue::new("http.request.method", req.method().as_str().to_string()),
+            KeyValue::new("url.scheme", url_scheme.clone()),
+        ];
+        active_labels.extend_from_slice(&self.state.labels);
         self.state.metric.req_active.add(
             1,
-            &[
-                KeyValue::new("http.request.method", req.method().as_str().to_string()),
-                KeyValue::new("url.scheme", url_scheme.clone()),
-            ],
+            &active_labels,
         );
 
         let start = Instant::now();
@@ -365,12 +361,14 @@ where
         let response = ready!(this.inner.poll(cx))?;
 
         // Decrease active requests.
+        let mut active_labels = vec![
+            KeyValue::new("http.request.method", this.method.clone()),
+            KeyValue::new("url.scheme", this.url_scheme.clone()),
+        ];
+        active_labels.extend_from_slice(&this.state.labels);
         this.state.metric.req_active.add(
             -1,
-            &[
-                KeyValue::new("http.request.method", this.method.clone()),
-                KeyValue::new("url.scheme", this.url_scheme.clone()),
-            ],
+            &active_labels,
         );
 
         if (this.state.skipper.skip)(this.path.as_str()) {
@@ -382,12 +380,13 @@ where
 
         let res_size = response.body().size_hint().upper().unwrap_or(0);
 
-        let labels = [
+        let mut labels = vec![
             KeyValue::new("http.request.method", this.method.clone()),
             KeyValue::new("http.route", this.path.clone()),
             KeyValue::new("http.response.status_code", status),
             KeyValue::new("server.address", this.host.clone()),
         ];
+        labels.extend_from_slice(&this.state.labels);
 
         this.state.metric.requests_total.add(1, &labels);
         this.state.metric.req_size.record(*this.req_size, &labels);
