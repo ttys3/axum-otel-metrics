@@ -1,4 +1,9 @@
-//! [axum](https://github.com/tokio-rs/axum) OpenTelemetry Metrics middleware with prometheus exporter
+//! [axum](https://github.com/tokio-rs/axum) OpenTelemetry Metrics middleware for collecting OpenTelemetry metrics.
+//!
+//! ## Overview
+//!
+//! This middleware records HTTP metrics following OpenTelemetry conventions and uses the global OpenTelemetry meter.
+//! Users are responsible for configuring their own OpenTelemetry exporter and setting up the global meter provider.
 //!
 //! ## Simple Usage
 //! ```
@@ -21,16 +26,24 @@
 //! ```
 //!
 //! ## Advanced Usage
-//! ```
-//! use axum_otel_metrics::HttpMetricsLayerBuilder;
+//! ```rust,no_run
+//! use axum_otel_metrics::{HttpMetricsLayerBuilder, PathSkipper};
 //! use axum::{response::Html, routing::get, Router};
+//! use std::collections::HashMap;
 //!
+//! // Define custom labels to include with each metric
+//! let mut labels = HashMap::new();
+//! labels.insert("environment".to_string(), "testing".to_string());
+//! labels.insert("region".to_string(), "us-west-2".to_string());
+//!
+//! // Create a custom path skipper to skip certain paths from metrics
+//! let skipper = PathSkipper::new(|path| path == "/healthz");
+//!
+//! // Build the metrics middleware with custom labels and skipper
 //! let metrics = HttpMetricsLayerBuilder::new()
-//! .with_service_name(env!("CARGO_PKG_NAME").to_string())
-//! .with_service_version(env!("CARGO_PKG_VERSION").to_string())
-//! .with_prefix("axum_metrics_demo".to_string())
-//! .with_labels(vec![("env".to_string(), "testing".to_string())].into_iter().collect())
-//! .build();
+//!     .with_labels(labels)
+//!     .with_skipper(skipper)
+//!     .build();
 //!
 //! let app = Router::<()>::new()
 //!     .route("/", get(handler))
@@ -132,7 +145,6 @@ impl Default for PathSkipper {
 
 #[derive(Clone)]
 pub struct HttpMetricsLayerBuilder {
-    prefix: Option<String>,
     labels: Vec<KeyValue>,
     skipper: PathSkipper,
     is_tls: bool,
@@ -141,7 +153,6 @@ pub struct HttpMetricsLayerBuilder {
 impl Default for HttpMetricsLayerBuilder {
     fn default() -> Self {
         Self {
-            prefix: None,
             labels: Vec::new(),
             skipper: PathSkipper::default(),
             is_tls: false,
@@ -152,12 +163,6 @@ impl Default for HttpMetricsLayerBuilder {
 impl HttpMetricsLayerBuilder {
     pub fn new() -> Self {
         HttpMetricsLayerBuilder::default()
-    }
-
-
-    pub fn with_prefix(mut self, prefix: String) -> Self {
-        self.prefix = Some(prefix);
-        self
     }
 
     pub fn with_labels(mut self, labels: std::collections::HashMap<String, String>) -> Self {
