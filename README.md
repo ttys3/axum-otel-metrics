@@ -4,14 +4,13 @@
 [![Crates.io](https://img.shields.io/crates/v/axum-otel-metrics)](https://crates.io/crates/axum-otel-metrics)
 [![Documentation](https://docs.rs/axum-otel-metrics/badge.svg)](https://docs.rs/axum-otel-metrics)
 
-axum OpenTelemetry metrics middleware with prometheus exporter
+axum OpenTelemetry metrics middleware 
 
 follow [Semantic Conventions for HTTP Metrics](https://github.com/open-telemetry/semantic-conventions/blob/main/docs/http/http-metrics.md)
 
 [axum](https://github.com/tokio-rs/axum) is an ergonomic and modular web framework built with Tokio, Tower, and Hyper
 
-be default, the metrics will be exported at `/metrics` endpoint.
-and below metrics will be exported:
+metrics will be recorded on the global opentelemetry meter:
 
 
 `requests_total` **counter**
@@ -73,8 +72,6 @@ let metrics = HttpMetricsLayerBuilder::new()
     .build();
 
 let app = Router::new()
-    // export metrics at `/metrics` endpoint
-    .merge(metrics.routes())
     .route("/", get(handler))
     .route("/hello", get(handler))
     .route("/world", get(handler))
@@ -98,8 +95,6 @@ let metrics = HttpMetricsLayerBuilder::new()
     .build();
 
 let app = Router::new()
-    // export metrics at `/metrics` endpoint
-    .merge(metrics.routes::<SharedState>())
     .route("/", get(handler))
     .route("/hello", get(handler))
     .route("/world", get(handler))
