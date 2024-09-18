@@ -14,10 +14,10 @@ exclude = [".github/*", "examples/*", "tests/*"]
 [dependencies]
 axum = "0.7"
 #axum = { git = "https://github.com/tokio-rs/axum.git", branch = "main"}
-opentelemetry = { version = "0.24", features = ["metrics"] }
+opentelemetry = { version = "0.25", features = ["metrics"] }
 opentelemetry_sdk = { version = "0.25.0", features = ["rt-tokio"] }
-opentelemetry-prometheus = { version = "0.17.0", features = ["prometheus-encoding"] }
-opentelemetry-semantic-conventions = { version = "0.16.0"}
+opentelemetry-prometheus = { version = "0.17.0", features = [ "prometheus-encoding", ] }
+opentelemetry-semantic-conventions = { version = "0.25.0" }
 #opentelemetry = { git = "https://github.com/open-telemetry/opentelemetry-rust.git", branch = "main", features = ["metrics", "rt-tokio"]}
 #opentelemetry-prometheus = { git = "https://github.com/open-telemetry/opentelemetry-rust.git", branch = "main", features = ["prometheus-encoding"] }
 #opentelemetry-semantic-conventions = { git = "https://github.com/open-telemetry/opentelemetry-rust.git", branch = "main"}
@@ -28,9 +28,12 @@ futures-util = "0.3.30"
 pin-project-lite = "0.2.14"
 http = "1.1.0"
 http-body = "1.0.1"
-opentelemetry-otlp = { version = "0.25.0", features = ["metrics", "http-proto", "reqwest-client"] }
+opentelemetry-otlp = { version = "0.25.0", features = [ "metrics", "http-proto", "reqwest-client", ] }
 opentelemetry-http = "0.25.0"
 
 
 [dev-dependencies]
-tokio = { version = "1.39.2", features = ["macros"] }
+tokio = { version = "1.38", features = ["macros"] }
+
+[patch.crates-io]
+opentelemetry-prometheus = { git="https://github.com/ttys3/opentelemetry-rust.git", branch="opentelemetry-prometheus-sdk-0.25" }

@@ -67,9 +67,13 @@ use opentelemetry::{Key, KeyValue, Value};
 
 use opentelemetry::metrics::{Counter, Histogram, UpDownCounter};
 
-use opentelemetry::metrics::{MeterProvider as _};
+use opentelemetry::metrics::MeterProvider;
 
-use opentelemetry_sdk::metrics::{new_view, Aggregation, Instrument, SdkMeterProvider, Stream, PeriodicReader, reader::{DefaultAggregationSelector, DefaultTemporalitySelector},};
+use opentelemetry_sdk::metrics::{
+    new_view,
+    reader::{DefaultAggregationSelector, DefaultTemporalitySelector},
+    Aggregation, Instrument, PeriodicReader, SdkMeterProvider, Stream,
+};
 use opentelemetry_sdk::resource::{EnvResourceDetector, SdkProvidedResourceDetector, TelemetryResourceDetector};
 use opentelemetry_semantic_conventions::resource::{SERVICE_NAME, SERVICE_NAMESPACE, SERVICE_VERSION};
 
@@ -341,9 +345,8 @@ impl HttpMetricsLayerBuilder {
             res
         };
 
-        let mut registry  = None;
-        let mut builder = SdkMeterProvider::builder()
-            .with_resource(res);
+        let mut registry = None;
+        let mut builder = SdkMeterProvider::builder().with_resource(res);
 
         // exporter
 
@@ -392,7 +395,13 @@ impl HttpMetricsLayerBuilder {
         global::set_meter_provider(provider.clone());
         // this must called after the global meter provider has ben initialized
         // let meter = global::meter("axum-app");
-        let meter = provider.meter("axum-app");
+        // let meter = provider.meter("axum-app");
+        let meter = provider.versioned_meter(
+            env!("CARGO_PKG_NAME"),
+            Some(env!("CARGO_PKG_VERSION")),
+            Some("https://opentelemetry.io/schema/1.0.0"),
+            None,
+        );
 
         // requests_total
         let requests_total = meter
@@ -478,14 +487,16 @@ impl HttpMetricsLayerBuilder {
                 .build_metrics_exporter(
                     Box::new(DefaultAggregationSelector::new()),
                     Box::new(DefaultTemporalitySelector::new()),
-                ).unwrap()
+                )
+                .unwrap()
         } else {
             opentelemetry_otlp::new_exporter()
                 .tonic()
                 .build_metrics_exporter(
                     Box::new(DefaultAggregationSelector::new()),
                     Box::new(DefaultTemporalitySelector::new()),
-                ).unwrap()
+                )
+                .unwrap()
         };
 
         let reader = PeriodicReader::builder(exporter, opentelemetry_sdk::runtime::Tokio)
