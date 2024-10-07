@@ -14,7 +14,7 @@ exclude = [".github/*", "examples/*", "tests/*"]
 [dependencies]
 axum = "0.7"
 #axum = { git = "https://github.com/tokio-rs/axum.git", branch = "main"}
-opentelemetry = { version = "0.25", features = ["metrics"] }
+opentelemetry = { version = "0.26", features = ["metrics"] }
 opentelemetry_sdk = { version = "0.25.0", features = ["rt-tokio"] }
 opentelemetry-prometheus = { version = "0.17.0", features = [ "prometheus-encoding", ] }
 opentelemetry-semantic-conventions = { version = "0.25.0" }
