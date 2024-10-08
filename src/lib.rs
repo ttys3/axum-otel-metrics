@@ -71,7 +71,7 @@ use opentelemetry::metrics::MeterProvider;
 
 use opentelemetry_sdk::metrics::{
     new_view,
-    reader::{DefaultAggregationSelector, DefaultTemporalitySelector},
+    reader::{DefaultTemporalitySelector},
     Aggregation, Instrument, PeriodicReader, SdkMeterProvider, Stream,
 };
 use opentelemetry_sdk::resource::{EnvResourceDetector, SdkProvidedResourceDetector, TelemetryResourceDetector};
@@ -485,7 +485,6 @@ impl HttpMetricsLayerBuilder {
             opentelemetry_otlp::new_exporter()
                 .http()
                 .build_metrics_exporter(
-                    Box::new(DefaultAggregationSelector::new()),
                     Box::new(DefaultTemporalitySelector::new()),
                 )
                 .unwrap()
@@ -493,7 +492,6 @@ impl HttpMetricsLayerBuilder {
             opentelemetry_otlp::new_exporter()
                 .tonic()
                 .build_metrics_exporter(
-                    Box::new(DefaultAggregationSelector::new()),
                     Box::new(DefaultTemporalitySelector::new()),
                 )
                 .unwrap()
