@@ -70,9 +70,8 @@ use opentelemetry::metrics::{Counter, Histogram, UpDownCounter};
 use opentelemetry::metrics::MeterProvider;
 
 use opentelemetry_sdk::metrics::{
-    new_view,
     reader::{DefaultTemporalitySelector},
-    Aggregation, Instrument, PeriodicReader, SdkMeterProvider, Stream,
+    PeriodicReader, SdkMeterProvider,
 };
 use opentelemetry_sdk::resource::{EnvResourceDetector, SdkProvidedResourceDetector, TelemetryResourceDetector};
 use opentelemetry_semantic_conventions::resource::{SERVICE_NAME, SERVICE_NAMESPACE, SERVICE_VERSION};
@@ -358,38 +357,7 @@ impl HttpMetricsLayerBuilder {
             builder = builder.with_reader(exporter);
         }
 
-        let provider = builder
-            .with_view(
-                new_view(
-                    Instrument::new().name("*http.server.request.duration"),
-                    Stream::new().aggregation(Aggregation::ExplicitBucketHistogram {
-                        boundaries: HTTP_REQ_DURATION_HISTOGRAM_BUCKETS.to_vec(),
-                        record_min_max: true,
-                    }),
-                )
-                .unwrap(),
-            )
-            .with_view(
-                new_view(
-                    Instrument::new().name("*http.server.request.size"),
-                    Stream::new().aggregation(Aggregation::ExplicitBucketHistogram {
-                        boundaries: HTTP_REQ_SIZE_HISTOGRAM_BUCKETS.to_vec(),
-                        record_min_max: true,
-                    }),
-                )
-                .unwrap(),
-            )
-            .with_view(
-                new_view(
-                    Instrument::new().name("*http.server.response.size"),
-                    Stream::new().aggregation(Aggregation::ExplicitBucketHistogram {
-                        boundaries: HTTP_REQ_SIZE_HISTOGRAM_BUCKETS.to_vec(),
-                        record_min_max: true,
-                    }),
-                )
-                .unwrap(),
-            )
-            .build();
+        let provider = builder.build();
 
         // init the global meter provider
         global::set_meter_provider(provider.clone());
@@ -414,6 +382,7 @@ impl HttpMetricsLayerBuilder {
             .f64_histogram("http.server.request.duration")
             .with_unit("s")
             .with_description("The HTTP request latencies in seconds.")
+            .with_boundaries(HTTP_REQ_DURATION_HISTOGRAM_BUCKETS.to_vec())
             .init();
 
         // request_size_bytes
@@ -421,12 +390,14 @@ impl HttpMetricsLayerBuilder {
             .u64_histogram("http.server.request.size")
             .with_unit("By")
             .with_description("The HTTP request sizes in bytes.")
+            .with_boundaries(HTTP_REQ_SIZE_HISTOGRAM_BUCKETS.to_vec())
             .init();
 
         let res_size = meter
             .u64_histogram("http.server.response.size")
             .with_unit("By")
             .with_description("The HTTP reponse sizes in bytes.")
+            .with_boundaries(HTTP_REQ_SIZE_HISTOGRAM_BUCKETS.to_vec())
             .init();
 
         // no u64_up_down_counter because up_down_counter maybe < 0 since it allow negative values
