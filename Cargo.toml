@@ -28,7 +28,7 @@ futures-util = "0.3.30"
 pin-project-lite = "0.2.14"
 http = "1.1.0"
 http-body = "1.0.1"
-opentelemetry-otlp = { version = "0.25.0", features = [ "metrics", "http-proto", "reqwest-client", ] }
+opentelemetry-otlp = { version = "0.26.0", features = [ "metrics", "http-proto", "reqwest-client", ] }
 opentelemetry-http = "0.26.0"
 
 
