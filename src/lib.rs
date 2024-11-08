@@ -244,6 +244,7 @@ pub struct HttpMetricsLayerBuilder {
     skipper: PathSkipper,
     is_tls: bool,
     exporter: Option<String>,
+    registry: Option<Registry>,
 }
 
 impl Default for HttpMetricsLayerBuilder {
@@ -257,6 +258,7 @@ impl Default for HttpMetricsLayerBuilder {
             skipper: PathSkipper::default(),
             is_tls: false,
             exporter: Some("prometheus".to_string()),
+            registry: None,
         }
     }
 }
@@ -298,6 +300,11 @@ impl HttpMetricsLayerBuilder {
 
     pub fn with_exporter(mut self, exporter: String) -> Self {
         self.exporter = Some(exporter);
+        self
+    }
+
+    pub fn with_registry(mut self, registry: Registry) -> Self {
+        self.registry = Some(registry);
         self
     }
 
@@ -426,7 +433,9 @@ impl HttpMetricsLayerBuilder {
     }
 
     fn build_prometheus(&self) -> (Registry, impl opentelemetry_sdk::metrics::reader::MetricReader) {
-        let registry = if let Some(prefix) = self.prefix.clone() {
+        let registry = if let Some(registry) = self.registry.clone() {
+            registry
+        } else if let Some(prefix) = self.prefix.clone() {
             Registry::new_custom(Some(prefix), self.labels.clone()).expect("create prometheus registry")
         } else {
             Registry::new()
@@ -754,6 +763,26 @@ mod tests {
             .with_state(AppState {});
 
         async fn handler(_state: State<AppState>) -> &'static str {
+            "<h1>Hello, World!</h1>"
+        }
+    }
+
+    #[test]
+    fn test_builder_with_custom_registry() {
+        let metrics = HttpMetricsLayerBuilder::new()
+            .with_registry(prometheus::default_registry().to_owned())
+            .build();
+
+        let _app = Router::new()
+            // export metrics at `/metrics` endpoint
+            .merge(metrics.routes::<()>())
+            .route("/", get(handler))
+            .route("/hello", get(handler))
+            .route("/world", get(handler))
+            // add the metrics middleware
+            .layer(metrics);
+
+        async fn handler() -> &'static str {
             "<h1>Hello, World!</h1>"
         }
     }
