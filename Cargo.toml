@@ -36,4 +36,4 @@ opentelemetry-http = "0.27.0"
 tokio = { version = "1.42", features = ["macros"] }
 
 [patch.crates-io]
-opentelemetry-prometheus = { git="https://github.com/ttys3/opentelemetry-rust.git", branch="opentelemetry-prometheus-sdk-0.26" }
+opentelemetry-prometheus = { git="https://github.com/ttys3/opentelemetry-rust.git", branch="opentelemetry-prometheus-sdk-0.27" }
