@@ -17,7 +17,7 @@ follow [Semantic Conventions for HTTP Metrics](https://github.com/open-telemetry
 
 ## Usage
 
-> by default, it will use the [otlp exporter](https://opentelemetry.io/docs/specs/otel/metrics/sdk_exporters/otlp/)
+> by default, it will use the [OTLP Exporter](https://opentelemetry.io/docs/specs/otel/metrics/sdk_exporters/otlp/)
 > you can config it via env var:
 > `OTEL_EXPORTER_OTLP_ENDPOINT` or `OTEL_EXPORTER_OTLP_METRICS_ENDPOINT`
 
@@ -50,7 +50,7 @@ let app = Router::new()
     .layer(metrics);
 ```
 
-## prometheus exporter
+## Prometheus Exporter
 
 check the doc [Advanced Usage](https://docs.rs/axum-otel-metrics/latest/axum_otel_metrics/#advanced-usage) section to see how to use the prometheus exporter
 
