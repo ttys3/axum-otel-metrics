@@ -9,12 +9,10 @@ publish = false
 axum-otel-metrics = { path = "../../" }
 #axum = { git = "https://github.com/tokio-rs/axum.git", branch = "main"}
 axum = "0.7"
-tokio = { version = "1.39", features = ["full", "tracing"] }
-tracing = "0.1.40"
+tokio = { version = "1.42", features = ["full", "tracing"] }
+tracing = "0.1.41"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 rand = "0.8.5"
-opentelemetry = "0.26"
-#opentelemetry = { git = "https://github.com/open-telemetry/opentelemetry-rust.git", branch = "main", features = ["metrics", "rt-tokio"]}
-
-[patch.crates-io]
-opentelemetry-prometheus = { git="https://github.com/ttys3/opentelemetry-rust.git", branch="opentelemetry-prometheus-sdk-0.26" }
+opentelemetry = "0.27"
+opentelemetry-prometheus = { version = "0.27.0" }
+prometheus = "0.13.4"

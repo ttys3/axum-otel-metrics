@@ -4,14 +4,36 @@
 [![Crates.io](https://img.shields.io/crates/v/axum-otel-metrics)](https://crates.io/crates/axum-otel-metrics)
 [![Documentation](https://docs.rs/axum-otel-metrics/badge.svg)](https://docs.rs/axum-otel-metrics)
 
-axum OpenTelemetry metrics middleware with prometheus exporter
+axum OpenTelemetry metrics middleware
+
+supported exporters:
+
+- [otlp](https://opentelemetry.io/docs/specs/otel/metrics/sdk_exporters/otlp/)
+- [prometheus](https://opentelemetry.io/docs/specs/otel/metrics/sdk_exporters/prometheus/)
 
 follow [Semantic Conventions for HTTP Metrics](https://github.com/open-telemetry/semantic-conventions/blob/main/docs/http/http-metrics.md)
 
 [axum](https://github.com/tokio-rs/axum) is an ergonomic and modular web framework built with Tokio, Tower, and Hyper
 
-be default, the metrics will be exported at `/metrics` endpoint.
-and below metrics will be exported:
+## Usage
+
+```rust
+use axum_otel_metrics::HttpMetricsLayerBuilder;
+
+let metrics = HttpMetricsLayerBuilder::new()
+    .build();
+
+let app = Router::new()
+    .route("/", get(handler))
+    .route("/hello", get(handler))
+    .route("/world", get(handler))
+    // add the metrics middleware
+    .layer(metrics);
+```
+
+## prometheus exporter
+
+for prometheus exporter, below metrics will be exported:
 
 
 `requests_total` **counter**
@@ -63,58 +85,13 @@ http_request_method
 url_scheme
 ```
 
-
-## Usage
-
-```rust
-use axum_otel_metrics::HttpMetricsLayerBuilder;
-
-let metrics = HttpMetricsLayerBuilder::new()
-    .build();
-
-let app = Router::new()
-    // export metrics at `/metrics` endpoint
-    .merge(metrics.routes())
-    .route("/", get(handler))
-    .route("/hello", get(handler))
-    .route("/world", get(handler))
-    // add the metrics middleware
-    .layer(metrics);
-```
-
-## Usage with `State`
-
-```rust
-use axum_otel_metrics::HttpMetricsLayerBuilder;
-
-#[derive(Clone)]
-pub struct SharedState {
-}
-
-let state = SharedState {
-};
-
-let metrics = HttpMetricsLayerBuilder::new()
-    .build();
-
-let app = Router::new()
-    // export metrics at `/metrics` endpoint
-    .merge(metrics.routes::<SharedState>())
-    .route("/", get(handler))
-    .route("/hello", get(handler))
-    .route("/world", get(handler))
-    // add the metrics middleware
-    .layer(metrics)
-    .with_state(state.clone());
-```
-
 ## OpenTelemetry Rust Instrumentation Status and Releases
 
 https://opentelemetry.io/docs/instrumentation/rust/#status-and-releases
 
 | Traces                                                                                           | Metrics | Logs                |
 |--------------------------------------------------------------------------------------------------|---------|---------------------|
-| [Beta](https://opentelemetry.io/docs/reference/specification/versioning-and-stability/#stable) | Alpha   | Alpha |
+| [Beta](https://github.com/open-telemetry/oteps/blob/main/text/0232-maturity-of-otel.md#beta) | Beta   | Beta |
 
 ## OpenTelemetry Metrics Exporter
 

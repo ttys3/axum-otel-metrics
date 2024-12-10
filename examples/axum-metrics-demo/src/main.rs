@@ -1,14 +1,19 @@
 use axum::extract::{MatchedPath, State};
-use axum::{response::Html, routing::{get, post}, Router};
+use axum::{
+    response::Html,
+    routing::{get, post},
+    Router,
+};
 use rand::Rng;
 use std::time;
 
-use axum_otel_metrics::{HttpMetricsLayerBuilder, PathSkipper};
 use axum::response::Response;
+use axum_otel_metrics::{HttpMetricsLayerBuilder, PathSkipper};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
-use opentelemetry::metrics::{Counter};
+use opentelemetry::metrics::Counter;
 use opentelemetry::{global, KeyValue};
+use prometheus::{Encoder, TextEncoder};
 
 mod sub;
 
@@ -30,21 +35,33 @@ async fn main() {
     let metrics = HttpMetricsLayerBuilder::new()
         .with_service_name(env!("CARGO_PKG_NAME").to_string())
         .with_service_version(env!("CARGO_PKG_VERSION").to_string())
-        // .with_prefix("axum_metrics_demo".to_string())
-        .with_labels(vec![("env".to_string(), "dev".to_string())].into_iter().collect())
+        .with_target_labels(vec![KeyValue::new("env", "dev")])
         .with_skipper(PathSkipper::new(|s| s.starts_with("/skip")))
-        .with_exporter("prometheus".into())
+        .with_metric_reader(
+            opentelemetry_prometheus::exporter()
+                .with_registry(prometheus::default_registry().clone())
+                .build()
+                .unwrap()
+        )
         .build();
 
     let state = SharedState {
         root_dir: String::from("/tmp"),
-        foobar: global::meter("axum-app").u64_counter("foobar").init(),
+        foobar: global::meter("axum-app").u64_counter("foobar").build(),
     };
-
 
     // build our application with a route
     let app = Router::new()
-        .merge(metrics.routes::<SharedState>())
+        .route(
+            "/metrics",
+            get(|| async {
+                let mut buffer = Vec::new();
+                let encoder = TextEncoder::new();
+                encoder.encode(&prometheus::gather(), &mut buffer).unwrap();
+                // return metrics
+                String::from_utf8(buffer).unwrap()
+            }),
+        )
         .nest("/sub", crate::sub::routes())
         .route("/", get(handler))
         .route("/hello", get(handler))
@@ -53,16 +70,12 @@ async fn main() {
         .route("/post", post(handler))
         .layer(metrics)
         .layer(axum::middleware::map_response(set_header))
-        .fallback(||{
-            async { Html("404 page not found".to_string()) }
-        })
+        .fallback(|| async { Html("404 page not found".to_string()) })
         .with_state(state.clone());
 
     // run it
     let addr = "127.0.0.1:3000";
-    let listener = tokio::net::TcpListener::bind(addr)
-        .await
-        .unwrap();
+    let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
     println!("listening on http://{}", listener.local_addr().unwrap());
     axum::serve(listener, app).await.unwrap();
 }
@@ -76,7 +89,7 @@ async fn handler(state: State<SharedState>, path: MatchedPath) -> Html<String> {
     let mut rng = rand::thread_rng();
 
     // 1024 / 16 = 64
-    let n_bytes = rng.gen_range(1..5120*64); // 16 bytes to 5120 KB
+    let n_bytes = rng.gen_range(1..5120 * 64); // 16 bytes to 5120 KB
     let mut dummy = "123456789abcdef".repeat(n_bytes);
 
     let delay_ms: u64;
