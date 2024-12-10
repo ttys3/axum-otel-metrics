@@ -17,6 +17,25 @@ follow [Semantic Conventions for HTTP Metrics](https://github.com/open-telemetry
 
 ## Usage
 
+> by default, it will use the [otlp exporter](https://opentelemetry.io/docs/specs/otel/metrics/sdk_exporters/otlp/)
+> you can config it via env var:
+> `OTEL_EXPORTER_OTLP_ENDPOINT` or `OTEL_EXPORTER_OTLP_METRICS_ENDPOINT`
+
+`OTEL_EXPORTER_OTLP_ENDPOINT` default value:
+
+gRPC: `http://localhost:4317`
+
+HTTP: `http://localhost:4318`
+
+
+`OTEL_EXPORTER_OTLP_METRICS_ENDPOINT` default value:
+
+gRPC: `http://localhost:4317`
+
+HTTP: `http://localhost:4318/v1/metrics`
+
+> for more details, see https://opentelemetry.io/docs/languages/sdk-configuration/otlp-exporter/#endpoint-configuration
+
 ```rust
 use axum_otel_metrics::HttpMetricsLayerBuilder;
 
