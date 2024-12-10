@@ -52,8 +52,9 @@ let app = Router::new()
 
 ## prometheus exporter
 
-for prometheus exporter, below metrics will be exported:
+check the doc [Advanced Usage](https://docs.rs/axum-otel-metrics/latest/axum_otel_metrics/#advanced-usage) section to see how to use the prometheus exporter
 
+for prometheus exporter, below metrics will be exported:
 
 `requests_total` **counter**
 
