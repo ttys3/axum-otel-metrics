@@ -1,16 +1,19 @@
-//! [axum](https://github.com/tokio-rs/axum) OpenTelemetry Metrics middleware with prometheus exporter
+//! [axum](https://github.com/tokio-rs/axum) OpenTelemetry Metrics middleware
 //!
 //! ## Simple Usage
+//! 
+//! by default, the metrics will using the [otlp exporter](https://opentelemetry.io/docs/specs/otel/metrics/sdk_exporters/otlp/), 
+//! if you want to use the [prometheus exporter](https://opentelemetry.io/docs/specs/otel/metrics/sdk_exporters/prometheus/), 
+//! you need to set the `metric_reader` to `PrometheusExporter`, see [Advanced Usage](#advanced-usage) below
+//! 
 //! ```
 //! use axum_otel_metrics::HttpMetricsLayerBuilder;
 //! use axum::{response::Html, routing::get, Router};
-//!
+//! 
 //! let metrics = HttpMetricsLayerBuilder::new()
 //!     .build();
 //!
 //! let app = Router::<()>::new()
-//!     // export metrics at `/metrics` endpoint
-//!     .merge(metrics.routes())
 //!     .route("/", get(handler))
 //!     .route("/hello", get(handler))
 //!     .route("/world", get(handler))
@@ -23,6 +26,12 @@
 //! ```
 //!
 //! ## Advanced Usage
+//! 
+//! this is an example to use the [prometheus exporter](https://opentelemetry.io/docs/specs/otel/metrics/sdk_exporters/prometheus/)
+//! 
+//! it will export the metrics at `/metrics` endpoint
+//! 
+//! 
 //! ```
 //! use axum_otel_metrics::HttpMetricsLayerBuilder;
 //! use axum::{response::Html, routing::get, Router};
@@ -31,6 +40,7 @@
 //! let metrics = HttpMetricsLayerBuilder::new()
 //! .with_service_name(env!("CARGO_PKG_NAME").to_string())
 //! .with_service_version(env!("CARGO_PKG_VERSION").to_string())
+//! .with_metric_reader(opentelemetry_prometheus::exporter().with_registry(prometheus::default_registry().clone()).build().unwrap())
 //! .build();
 //!
 //! let app = Router::<()>::new()
@@ -209,6 +219,7 @@ impl Default for PathSkipper {
 pub struct HttpMetricsLayerBuilder<T: opentelemetry_sdk::metrics::reader::MetricReader + Send + Sync + 'static> {
     service_name: Option<String>,
     service_version: Option<String>,
+    target_labels: Vec<KeyValue>,
     skipper: PathSkipper,
     is_tls: bool,
     metric_reader: Option<T>,
@@ -219,6 +230,7 @@ impl<T: opentelemetry_sdk::metrics::reader::MetricReader + Send + Sync + 'static
         Self {
             service_name: None,
             service_version: None,
+            target_labels: vec![],
             skipper: PathSkipper::default(),
             is_tls: false,
             metric_reader: None,
@@ -238,6 +250,11 @@ impl<T: opentelemetry_sdk::metrics::reader::MetricReader + Send + Sync + 'static
 
     pub fn with_service_version(mut self, service_version: String) -> Self {
         self.service_version = Some(service_version);
+        self
+    }
+
+    pub fn with_target_labels(mut self, labels: Vec<KeyValue>) -> Self {
+        self.target_labels = labels;
         self
     }
 
@@ -293,6 +310,9 @@ impl<T: opentelemetry_sdk::metrics::reader::MetricReader + Send + Sync + 'static
         } else {
             res
         };
+
+        let res = res.merge(&mut Resource::new(self.target_labels.clone()));
+
 
         let mut builder = SdkMeterProvider::builder().with_resource(res);
 
@@ -653,7 +673,9 @@ mod tests {
         #[derive(Clone)]
         struct AppState {}
 
-        let metrics = HttpMetricsLayerBuilder::<opentelemetry_prometheus::PrometheusExporter>::new().build();
+        let metrics = HttpMetricsLayerBuilder::<opentelemetry_prometheus::PrometheusExporter>::new()
+            .with_metric_reader(opentelemetry_prometheus::exporter().build().unwrap())
+            .build();
         let _app: Router<AppState> = Router::new()
             .route(
                 "/metrics",
