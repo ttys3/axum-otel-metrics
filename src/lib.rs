@@ -362,7 +362,7 @@ impl<T: opentelemetry_sdk::metrics::reader::MetricReader + Send + Sync + 'static
         let res_size = meter
             .u64_histogram("http.server.response.size")
             .with_unit("By")
-            .with_description("The HTTP reponse sizes in bytes.")
+            .with_description("The HTTP response sizes in bytes.")
             .with_boundaries(HTTP_REQ_SIZE_HISTOGRAM_BUCKETS.to_vec())
             .build();
 
