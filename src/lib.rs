@@ -2,9 +2,8 @@
 //!
 //! ## Simple Usage
 //! 
-//! by default, the metrics will using the [otlp exporter](https://opentelemetry.io/docs/specs/otel/metrics/sdk_exporters/otlp/), 
-//! if you want to use the [prometheus exporter](https://opentelemetry.io/docs/specs/otel/metrics/sdk_exporters/prometheus/), 
-//! you need to set the `metric_reader` to `PrometheusExporter`, see [Advanced Usage](#advanced-usage) below
+//! Meter provider should be configured through [opentelemetry_sdk `global::set_meter_provider`](https://docs.rs/opentelemetry/0.27.1/opentelemetry/global/index.html#global-metrics-api).
+//! if you want to use the [prometheus exporter](https://opentelemetry.io/docs/specs/otel/metrics/sdk_exporters/prometheus/), see [Advanced Usage](#advanced-usage) below.
 //! 
 //! ```
 //! use axum_otel_metrics::HttpMetricsLayerBuilder;
@@ -30,18 +29,20 @@
 //! this is an example to use the [prometheus exporter](https://opentelemetry.io/docs/specs/otel/metrics/sdk_exporters/prometheus/)
 //! 
 //! it will export the metrics at `/metrics` endpoint
-//! 
-//! 
+//!
 //! ```
 //! use axum_otel_metrics::HttpMetricsLayerBuilder;
 //! use axum::{response::Html, routing::get, Router};
+//!
+//! use opentelemetry::global;
+//! use opentelemetry_sdk::metrics::SdkMeterProvider;
 //! use prometheus::{Encoder, Registry, TextEncoder};
 //!
-//! let metrics = HttpMetricsLayerBuilder::new()
-//! .with_service_name(env!("CARGO_PKG_NAME").to_string())
-//! .with_service_version(env!("CARGO_PKG_VERSION").to_string())
-//! .with_metric_reader(opentelemetry_prometheus::exporter().with_registry(prometheus::default_registry().clone()).build().unwrap())
-//! .build();
+//! let exporter = opentelemetry_prometheus::exporter().with_registry(prometheus::default_registry().clone()).build().unwrap();
+//! let provider = SdkMeterProvider::builder().with_reader(exporter).build();
+//! global::set_meter_provider(provider.clone());
+//!
+//! let metrics = HttpMetricsLayerBuilder::new().build();
 //!
 //! let app = Router::<()>::new()
 //!     // export metrics at `/metrics` endpoint
@@ -64,44 +65,30 @@
 //! ```
 
 use axum::http::Response;
-use axum::{extract::MatchedPath, http::Request};
+use axum::{extract::MatchedPath, http, http::Request};
 use std::env;
 use std::sync::Arc;
-use std::time::Duration;
-
 use std::future::Future;
 use std::pin::Pin;
 use std::task::Poll::Ready;
 use std::task::{Context, Poll};
 use std::time::Instant;
 
-use opentelemetry::{Key, KeyValue};
-
+use opentelemetry::{KeyValue};
 use opentelemetry::metrics::{Counter, Histogram, UpDownCounter};
-
-use opentelemetry::metrics::MeterProvider;
-
-use opentelemetry_sdk::metrics::{PeriodicReader, SdkMeterProvider, Temporality};
-use opentelemetry_sdk::resource::{EnvResourceDetector, SdkProvidedResourceDetector, TelemetryResourceDetector};
-use opentelemetry_semantic_conventions::resource::{SERVICE_NAME, SERVICE_NAMESPACE, SERVICE_VERSION};
-
 use opentelemetry::global;
 
 use tower::{Layer, Service};
 
 use futures_util::ready;
 use http_body::Body as httpBody;
-use opentelemetry_sdk::Resource;
 use pin_project_lite::pin_project; // for `Body::size_hint`
-                                   // service.instance used by Tencent Cloud TKE APM only, for view application metrics by pod IP
-const SERVICE_INSTANCE: Key = Key::from_static_str("service.instance");
 
 /// the metrics we used in the middleware
 #[derive(Clone)]
 pub struct Metric {
     pub requests_total: Counter<u64>,
 
-    // before opentelemetry 0.18.0, Histogram called ValueRecorder
     pub req_duration: Histogram<f64>,
 
     pub req_size: Histogram<u64>,
@@ -216,46 +203,23 @@ impl Default for PathSkipper {
 }
 
 #[derive(Clone)]
-pub struct HttpMetricsLayerBuilder<T: opentelemetry_sdk::metrics::reader::MetricReader + Send + Sync + 'static> {
-    service_name: Option<String>,
-    service_version: Option<String>,
-    target_labels: Vec<KeyValue>,
+pub struct HttpMetricsLayerBuilder {
     skipper: PathSkipper,
     is_tls: bool,
-    metric_reader: Option<T>,
 }
 
-impl<T: opentelemetry_sdk::metrics::reader::MetricReader + Send + Sync + 'static> Default for HttpMetricsLayerBuilder<T> {
+impl Default for HttpMetricsLayerBuilder {
     fn default() -> Self {
         Self {
-            service_name: None,
-            service_version: None,
-            target_labels: vec![],
             skipper: PathSkipper::default(),
             is_tls: false,
-            metric_reader: None,
         }
     }
 }
 
-impl<T: opentelemetry_sdk::metrics::reader::MetricReader + Send + Sync + 'static> HttpMetricsLayerBuilder<T> {
+impl HttpMetricsLayerBuilder {
     pub fn new() -> Self {
         HttpMetricsLayerBuilder::default()
-    }
-
-    pub fn with_service_name(mut self, service_name: String) -> Self {
-        self.service_name = Some(service_name);
-        self
-    }
-
-    pub fn with_service_version(mut self, service_version: String) -> Self {
-        self.service_version = Some(service_version);
-        self
-    }
-
-    pub fn with_target_labels(mut self, labels: Vec<KeyValue>) -> Self {
-        self.target_labels = labels;
-        self
     }
 
     pub fn with_skipper(mut self, skipper: PathSkipper) -> Self {
@@ -263,77 +227,11 @@ impl<T: opentelemetry_sdk::metrics::reader::MetricReader + Send + Sync + 'static
         self
     }
 
-    pub fn with_metric_reader(mut self, metric_reader: T) -> Self {
-        self.metric_reader = Some(metric_reader);
-        self
-    }
-
     pub fn build(self) -> HttpMetricsLayer {
-        let mut resource = vec![];
-
-        let ns = env::var("INSTANCE_NAMESPACE").unwrap_or_default();
-        if !ns.is_empty() {
-            resource.push(KeyValue::new(SERVICE_NAMESPACE, ns.clone()));
-        }
-
-        let instance_ip = env::var("INSTANCE_IP").unwrap_or_default();
-        if !instance_ip.is_empty() {
-            resource.push(KeyValue::new(SERVICE_INSTANCE, instance_ip));
-        }
-
-        if let Some(service_name) = self.service_name.clone() {
-            // `foo.ns`
-            if !ns.is_empty() && !service_name.starts_with(format!("{}.", &ns).as_str()) {
-                resource.push(KeyValue::new(SERVICE_NAME, format!("{}.{}", service_name, &ns)));
-            } else {
-                resource.push(KeyValue::new(SERVICE_NAME, service_name));
-            }
-        }
-        if let Some(service_version) = self.service_version.clone() {
-            resource.push(KeyValue::new(SERVICE_VERSION, service_version));
-        }
-
-        let res = Resource::from_detectors(
-            Duration::from_secs(6),
-            vec![
-                // set service.name from env OTEL_SERVICE_NAME > env OTEL_RESOURCE_ATTRIBUTES > option_env! CARGO_BIN_NAME > unknown_service
-                Box::new(SdkProvidedResourceDetector),
-                // detect res from env OTEL_RESOURCE_ATTRIBUTES (resources string like key1=value1,key2=value2,...)
-                Box::new(EnvResourceDetector::new()),
-                // set telemetry.sdk.{name, language, version}
-                Box::new(TelemetryResourceDetector),
-            ],
-        );
-
-        let res = if !resource.is_empty() {
-            res.merge(&mut Resource::new(resource))
-        } else {
-            res
-        };
-
-        let res = res.merge(&mut Resource::new(self.target_labels.clone()));
-
-
-        let mut builder = SdkMeterProvider::builder().with_resource(res);
-
-        // exporter
-        if let Some(metric_reader) = self.metric_reader {
-            builder = builder.with_reader(metric_reader);
-        } else {
-            builder = builder.with_reader(self.build_otlp());
-        }
-
-        let provider = builder.build();
-
-        // init the global meter provider
-        global::set_meter_provider(provider.clone());
-        // this must called after the global meter provider has ben initialized
-        // let meter = global::meter("axum-app");
-        // let meter = provider.meter("axum-app");
+        let provider = global::meter_provider();
         let meter = provider.meter_with_scope(
             opentelemetry::InstrumentationScope::builder(env!("CARGO_PKG_NAME"))
                 .with_version(env!("CARGO_PKG_VERSION"))
-                .with_schema_url("https://opentelemetry.io/schema/1.0.0")
                 .build(),
         );
 
@@ -385,38 +283,6 @@ impl<T: opentelemetry_sdk::metrics::reader::MetricReader + Send + Sync + 'static
         };
 
         HttpMetricsLayer { state: meter_state }
-    }
-
-    /// init otlp metrics exporter
-    /// read from env var:
-    /// OTEL_EXPORTER_OTLP_METRICS_ENDPOINT, OTEL_EXPORTER_OTLP_METRICS_HEADERS,OTEL_EXPORTER_OTLP_METRICS_TIMEOUT
-    /// ref https://github.com/tokio-rs/tracing-opentelemetry/blob/5e3354ec24debcfbf856bfd1eb7022459dca1e6a/examples/opentelemetry-otlp.rs#L32
-    fn build_otlp(&self) -> PeriodicReader {
-        let protocol = match env::var("OTEL_EXPORTER_OTLP_METRICS_PROTOCOL")
-            .ok()
-            .or(env::var("OTEL_EXPORTER_OTLP_PROTOCOL").ok())
-        {
-            Some(val) => val,
-            None => "http/protobuf".to_string(),
-        };
-
-        let exporter = if protocol.starts_with("http") {
-            opentelemetry_otlp::MetricExporter::builder()
-                .with_http()
-                .with_temporality(Temporality::default())
-                .build()
-                .unwrap()
-        } else {
-            opentelemetry_otlp::MetricExporter::builder()
-                .with_tonic()
-                .with_temporality(Temporality::default())
-                .build()
-                .unwrap()
-        };
-
-        PeriodicReader::builder(exporter, opentelemetry_sdk::runtime::Tokio)
-            .with_interval(std::time::Duration::from_secs(30))
-            .build()
     }
 }
 
@@ -523,7 +389,7 @@ where
 
 /// compute approximate request size
 ///
-/// the implimentation refs [labstack/echo-contrib 's prometheus middleware](https://github.com/labstack/echo-contrib/blob/db8911a1af7abb6bdafbd999adada548fd9c0849/echoprometheus/prometheus.go#L329)
+/// the implementation refs [labstack/echo-contrib 's prometheus middleware](https://github.com/labstack/echo-contrib/blob/db8911a1af7abb6bdafbd999adada548fd9c0849/echoprometheus/prometheus.go#L329)
 fn compute_approximate_request_size<T>(req: &Request<T>) -> usize {
     let mut s = 0;
     s += req.uri().path().len();
@@ -644,7 +510,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_prom_exporter_builder() {
-        let metrics = HttpMetricsLayerBuilder::<opentelemetry_prometheus::PrometheusExporter>::new().build();
+        let metrics = HttpMetricsLayerBuilder::new().build();
         let _app = Router::<HttpMetricsLayer>::new()
             // export metrics at `/metrics` endpoint
             .route(
@@ -673,8 +539,7 @@ mod tests {
         #[derive(Clone)]
         struct AppState {}
 
-        let metrics = HttpMetricsLayerBuilder::<opentelemetry_prometheus::PrometheusExporter>::new()
-            .with_metric_reader(opentelemetry_prometheus::exporter().build().unwrap())
+        let metrics = HttpMetricsLayerBuilder::new()
             .build();
         let _app: Router<AppState> = Router::new()
             .route(
@@ -704,7 +569,7 @@ mod tests {
         #[derive(Clone)]
         struct AppState {}
 
-        let metrics = HttpMetricsLayerBuilder::<opentelemetry_prometheus::PrometheusExporter>::new()
+        let metrics = HttpMetricsLayerBuilder::new()
             .with_skipper(crate::PathSkipper::new_with_fn(Arc::new(|_: &str| true)))
             .build();
         let _app: Router<AppState> = Router::new()
