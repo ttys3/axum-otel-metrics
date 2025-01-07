@@ -74,8 +74,8 @@ use std::task::Poll::Ready;
 use std::task::{Context, Poll};
 use std::time::Instant;
 
-use opentelemetry::{KeyValue};
-use opentelemetry::metrics::{Counter, Histogram, UpDownCounter};
+use opentelemetry::KeyValue;
+use opentelemetry::metrics::{Histogram, UpDownCounter};
 use opentelemetry::global;
 
 use tower::{Layer, Service};
@@ -87,8 +87,6 @@ use pin_project_lite::pin_project; // for `Body::size_hint`
 /// the metrics we used in the middleware
 #[derive(Clone)]
 pub struct Metric {
-    pub requests_total: Counter<u64>,
-
     pub req_duration: Histogram<f64>,
 
     pub req_size: Histogram<u64>,
@@ -235,12 +233,6 @@ impl HttpMetricsLayerBuilder {
                 .build(),
         );
 
-        // requests_total
-        let requests_total = meter
-            .u64_counter("requests")
-            .with_description("How many HTTP requests processed, partitioned by status code and HTTP method.")
-            .build();
-
         // request_duration_seconds
         let req_duration = meter
             .f64_histogram("http.server.request.duration")
@@ -272,7 +264,6 @@ impl HttpMetricsLayerBuilder {
 
         let meter_state = MetricState {
             metric: Metric {
-                requests_total,
                 req_duration,
                 req_size,
                 res_size,
@@ -449,9 +440,6 @@ where
             // 3. Host identifier of the Host header
             KeyValue::new("server.address", this.host.clone()),
         ];
-
-        this.state.metric.requests_total.add(1, &labels);
-
         this.state.metric.req_size.record(*this.req_size, &labels);
 
         this.state.metric.res_size.record(res_size, &labels);
