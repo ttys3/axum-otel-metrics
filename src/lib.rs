@@ -1,14 +1,14 @@
 //! [axum](https://github.com/tokio-rs/axum) OpenTelemetry Metrics middleware
 //!
 //! ## Simple Usage
-//! 
+//!
 //! Meter provider should be configured through [opentelemetry_sdk `global::set_meter_provider`](https://docs.rs/opentelemetry/0.27.1/opentelemetry/global/index.html#global-metrics-api).
 //! if you want to use the [prometheus exporter](https://opentelemetry.io/docs/specs/otel/metrics/sdk_exporters/prometheus/), see [Advanced Usage](#advanced-usage) below.
-//! 
+//!
 //! ```
 //! use axum_otel_metrics::HttpMetricsLayerBuilder;
 //! use axum::{response::Html, routing::get, Router};
-//! 
+//!
 //! let metrics = HttpMetricsLayerBuilder::new()
 //!     .build();
 //!
@@ -25,9 +25,9 @@
 //! ```
 //!
 //! ## Advanced Usage
-//! 
+//!
 //! this is an example to use the [prometheus exporter](https://opentelemetry.io/docs/specs/otel/metrics/sdk_exporters/prometheus/)
-//! 
+//!
 //! it will export the metrics at `/metrics` endpoint
 //!
 //! ```
@@ -67,16 +67,16 @@
 use axum::http::Response;
 use axum::{extract::MatchedPath, http, http::Request};
 use std::env;
-use std::sync::Arc;
 use std::future::Future;
 use std::pin::Pin;
+use std::sync::Arc;
 use std::task::Poll::Ready;
 use std::task::{Context, Poll};
 use std::time::Instant;
 
-use opentelemetry::KeyValue;
-use opentelemetry::metrics::{Histogram, UpDownCounter};
 use opentelemetry::global;
+use opentelemetry::metrics::{Histogram, UpDownCounter};
+use opentelemetry::KeyValue;
 
 use tower::{Layer, Service};
 
@@ -200,19 +200,10 @@ impl Default for PathSkipper {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct HttpMetricsLayerBuilder {
     skipper: PathSkipper,
     is_tls: bool,
-}
-
-impl Default for HttpMetricsLayerBuilder {
-    fn default() -> Self {
-        Self {
-            skipper: PathSkipper::default(),
-            is_tls: false,
-        }
-    }
 }
 
 impl HttpMetricsLayerBuilder {
@@ -330,7 +321,7 @@ where
                     return "https".to_string();
                 }
                 if let Some(scheme) = req.headers().get("X-Url-Scheme") {
-                     scheme.to_str().unwrap().to_string()
+                    scheme.to_str().unwrap().to_string()
                 } else {
                     "http".to_string()
                 }
@@ -527,8 +518,7 @@ mod tests {
         #[derive(Clone)]
         struct AppState {}
 
-        let metrics = HttpMetricsLayerBuilder::new()
-            .build();
+        let metrics = HttpMetricsLayerBuilder::new().build();
         let _app: Router<AppState> = Router::new()
             .route(
                 "/metrics",
