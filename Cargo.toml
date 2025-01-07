@@ -12,8 +12,7 @@ exclude = [".github/*", "examples/*", "tests/*"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [dependencies]
-axum = "0.8"
-
+axum = "0.8.1"
 opentelemetry = { version = "0.27", features = ["metrics"] }
 opentelemetry_sdk = "0.27.1"
 
