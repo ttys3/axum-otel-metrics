@@ -56,11 +56,6 @@ check the doc [Advanced Usage](https://docs.rs/axum-otel-metrics/latest/axum_ote
 
 for prometheus exporter, below metrics will be exported:
 
-`requests_total` **counter**
-
-```
-requests_total
-```
 
 `http_server_active_requests` **gauge**
 
