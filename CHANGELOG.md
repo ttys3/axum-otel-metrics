@@ -6,42 +6,48 @@ All notable changes to this project will be documented in this file.
 
 ### 🚀 Features
 
-- Add default configuration for git-cliff (7fbaefa)
-- Add changelog command to Makefile (7849b89)
+- Add default configuration for git-cliff (d86c694)
+- Add changelog command to Makefile (0f7cdb6)
+- *(metrics)* Add custom bucket support for http metrics layer (84e0125)
 
 ### 🚜 Refactor
 
-- *(metrics)* Remove requests_total counter and related code (cfad617)
-- Derive default for HttpMetricsLayerBuilder (431dfbb)
+- [**breaking**] Remove provider configuration from builder logic (2331569)
+- *(metrics)* [**breaking**] Remove requests_total counter and related code (dd4380f)
+- Derive default for HttpMetricsLayerBuilder (9195432)
+- Axum prom example: update dependencies and refactor code (6d36856)
+- *(example)* Refine response size and latency bucketing (a5ca20b)
 
 ### 📚 Documentation
 
-- Update changelog template formatting (fb12e69)
+- Update changelog template formatting (352bd69)
 
 ### ⚙️ Miscellaneous Tasks
 
-- Fix typo (21aee4e)
-- Remove provider configuration from builder logic (5fa718c)
-- Update dependencies in Cargo.toml (5a3a263)
-- Update CHANGELOG.md (2daf719)
+- Fix typo (fe09ab8)
+- [**breaking**] Update dependencies in Cargo.toml (27dc71e)
+- Update CHANGELOG.md (a1cc159)
+- Update CHANGELOG.md (3f6c151)
+- Update examples .gitignore to track Cargo.lock to avoid release-plz complain (b2a666d)
+- Update CHANGELOG.md (bcbefbc)
 
-## [0.9.1] - 2024-12-10
+## [0.9.1] - 2025-02-13
 
 ### 🚀 Features
 
-- Add script to publish crate to crates-io (19e40e4)
+- Add script to publish crate to crates-io (fa26db6)
 
 ### 📚 Documentation
 
-- Update README with OTLP exporter configuration details (445eb11)
-- Update README with prometheus exporter usage link (f754702)
-- Update README to improve consistency and formatting (d05183b)
+- Update README with OTLP exporter configuration details (be69da8)
+- Update README with prometheus exporter usage link (feef942)
+- Update README to improve consistency and formatting (fccf062)
 
 ### ⚙️ Miscellaneous Tasks
 
-- Bump version to 0.9.1 (28091ce)
+- Bump version to 0.9.1 (c27c369)
 
-## [0.9.0] - 2024-12-10
+## [0.9.0] - 2025-02-13
 
 ### 🐛 Bug Fixes
 
@@ -50,7 +56,7 @@ All notable changes to this project will be documented in this file.
 ### 🚜 Refactor
 
 - Use with_boundaries API to provide custom bounds for Histogram instruments (6b6fa27)
-- *(metrics)* Remove Prometheus exporter and registry references (f01c11f)
+- *(metrics)* [**breaking**] Remove Prometheus exporter and registry references (af9eded)
 
 ### 📚 Documentation
 
@@ -61,8 +67,8 @@ All notable changes to this project will be documented in this file.
 - Update dependencies and refactor SDK meter provider usage (51b1479)
 - Bump version to 0.9.0-alpha.3 (a6b6b94)
 - Update dependency versions in Cargo.toml (0508e73)
-- Update dependencies and improve metrics documentation (0e09dff)
-- Update axum-otel-metrics to version 0.9.0 (b7d4110)
+- Update dependencies and improve metrics documentation (bd20ffe)
+- Update axum-otel-metrics to version 0.9.0 (1cfb4af)
 
 ## [0.9.0-alpha.2] - 2024-08-03
 
