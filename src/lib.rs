@@ -9,13 +9,13 @@
 //! use axum_otel_metrics::HttpMetricsLayerBuilder;
 //! use axum::{response::Html, routing::get, Router};
 //! use opentelemetry_sdk::metrics::{PeriodicReader, SdkMeterProvider, Temporality};
-//! 
+//!
 //! let exporter = opentelemetry_otlp::MetricExporter::builder()
 //!     .with_http()
 //!     .with_temporality(Temporality::default())
 //!     .build()
 //!     .unwrap();
-//! 
+//!
 //! let reader = PeriodicReader::builder(exporter, opentelemetry_sdk::runtime::Tokio)
 //!     .with_interval(std::time::Duration::from_secs(30))
 //!     .build()
@@ -28,7 +28,7 @@
 //!  // TODO: ensure defer run `provider.shutdown()?;`
 //!
 //! global::set_meter_provider(provider.clone());
-//! 
+//!
 //! let metrics = HttpMetricsLayerBuilder::new()
 //!     .build();
 //!
@@ -65,7 +65,7 @@
 //!
 //! let provider = SdkMeterProvider::builder().with_reader(exporter).build();
 //! // TODO: ensure defer run `provider.shutdown()?;`
-//! 
+//!
 //! global::set_meter_provider(provider.clone());
 //!
 //! let metrics = HttpMetricsLayerBuilder::new().build();
@@ -103,7 +103,9 @@ use std::time::Instant;
 use opentelemetry::global;
 use opentelemetry::metrics::{Histogram, UpDownCounter};
 use opentelemetry::KeyValue;
-use opentelemetry_semantic_conventions::metric::{HTTP_SERVER_ACTIVE_REQUESTS, HTTP_SERVER_REQUEST_DURATION, HTTP_SERVER_REQUEST_BODY_SIZE, HTTP_SERVER_RESPONSE_BODY_SIZE};
+use opentelemetry_semantic_conventions::metric::{
+    HTTP_SERVER_ACTIVE_REQUESTS, HTTP_SERVER_REQUEST_BODY_SIZE, HTTP_SERVER_REQUEST_DURATION, HTTP_SERVER_RESPONSE_BODY_SIZE,
+};
 
 use tower::{Layer, Service};
 
@@ -263,13 +265,11 @@ impl HttpMetricsLayerBuilder {
                 .build(),
         );
 
-        let duration_buckets = self.duration_buckets.unwrap_or_else(|| 
-            HTTP_REQ_DURATION_HISTOGRAM_BUCKETS.to_vec()
-        );
-        
-        let size_buckets = self.size_buckets.unwrap_or_else(|| 
-            HTTP_REQ_SIZE_HISTOGRAM_BUCKETS.to_vec()
-        );
+        let duration_buckets = self
+            .duration_buckets
+            .unwrap_or_else(|| HTTP_REQ_DURATION_HISTOGRAM_BUCKETS.to_vec());
+
+        let size_buckets = self.size_buckets.unwrap_or_else(|| HTTP_REQ_SIZE_HISTOGRAM_BUCKETS.to_vec());
 
         let req_duration = meter
             .f64_histogram(HTTP_SERVER_REQUEST_DURATION)
@@ -438,8 +438,7 @@ fn compute_approximate_request_size<T>(req: &Request<T>) -> usize {
 }
 
 fn compute_request_body_size<T>(req: &Request<T>) -> usize {
-    req
-        .headers()
+    req.headers()
         .get(http::header::CONTENT_LENGTH)
         .map(|v| v.to_str().unwrap().parse::<usize>().unwrap_or(0))
         .unwrap_or(0)
@@ -507,7 +506,6 @@ mod tests {
     use prometheus::{Encoder, Registry, TextEncoder};
     use std::sync::Arc;
 
-
     async fn metrics_handler() -> String {
         let mut buffer = Vec::new();
         let encoder = TextEncoder::new();
@@ -550,17 +548,19 @@ mod tests {
         println!("{}", String::from_utf8(result).unwrap());
     }
 
-
     #[tokio::test]
     async fn test_builder_with_arced_skipper() {
-        let exporter = opentelemetry_prometheus::exporter().with_registry(prometheus::default_registry().clone()).build().unwrap();
+        let exporter = opentelemetry_prometheus::exporter()
+            .with_registry(prometheus::default_registry().clone())
+            .build()
+            .unwrap();
         let provider = SdkMeterProvider::builder().with_reader(exporter).build();
         global::set_meter_provider(provider.clone());
 
         let metrics = HttpMetricsLayerBuilder::new()
             .with_skipper(crate::PathSkipper::new_with_fn(Arc::new(|s: &str| s.starts_with("/skip"))))
             .build();
-        
+
         let app: Router = Router::new()
             .route("/metrics", get(metrics_handler))
             .route("/skip", get(|| async { "skip this handler" }))
@@ -577,7 +577,10 @@ mod tests {
 
         let response = server.get("/record").await;
         assert_eq!(response.status_code(), 200);
-        println!("/record response: {:}", String::from_utf8(response.as_bytes().to_vec()).unwrap());
+        println!(
+            "/record response: {:}",
+            String::from_utf8(response.as_bytes().to_vec()).unwrap()
+        );
 
         let response = server.get("/metrics").await;
         assert_eq!(response.status_code(), 200);
@@ -636,7 +639,8 @@ mod tests {
         for bucket in custom_duration_buckets {
             assert!(
                 metrics_str.contains(&format!("le=\"{}\"", bucket)),
-                "Duration bucket {} not found in metrics output", bucket
+                "Duration bucket {} not found in metrics output",
+                bucket
             );
         }
 
@@ -644,7 +648,8 @@ mod tests {
         for bucket in custom_size_buckets {
             assert!(
                 metrics_str.contains(&format!("le=\"{}\"", bucket)),
-                "Size bucket {} not found in metrics output", bucket
+                "Size bucket {} not found in metrics output",
+                bucket
             );
         }
     }
@@ -662,9 +667,7 @@ mod tests {
         // Create metrics layer with default buckets
         let metrics = HttpMetricsLayerBuilder::new().build();
 
-        let app = Router::<()>::new()
-            .route("/test", get(|| async { "test" }))
-            .layer(metrics);
+        let app = Router::<()>::new().route("/test", get(|| async { "test" })).layer(metrics);
 
         // Create test server
         let server = TestServer::new(app).unwrap();
@@ -684,14 +687,16 @@ mod tests {
         for bucket in HTTP_REQ_DURATION_HISTOGRAM_BUCKETS {
             assert!(
                 metrics_str.contains(&format!("le=\"{}\"", bucket)),
-                "Default duration bucket {} not found in metrics output", bucket
+                "Default duration bucket {} not found in metrics output",
+                bucket
             );
         }
 
         for bucket in HTTP_REQ_SIZE_HISTOGRAM_BUCKETS {
             assert!(
                 metrics_str.contains(&format!("le=\"{}\"", bucket)),
-                "Default size bucket {} not found in metrics output", bucket
+                "Default size bucket {} not found in metrics output",
+                bucket
             );
         }
     }
