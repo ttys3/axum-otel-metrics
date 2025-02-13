@@ -15,7 +15,7 @@ exclude = [".github/*", "examples/*", "tests/*"]
 axum = "0.8.1"
 opentelemetry = { version = "0.28", features = ["metrics"] }
 opentelemetry_sdk = "0.28.0"
-
+opentelemetry-semantic-conventions = { version = "0.28.0", features = ["semconv_experimental"] }
 tower = "0.5.2"
 futures-util = "0.3.31"
 pin-project-lite = "0.2.16"

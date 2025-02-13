@@ -103,6 +103,7 @@ use std::time::Instant;
 use opentelemetry::global;
 use opentelemetry::metrics::{Histogram, UpDownCounter};
 use opentelemetry::KeyValue;
+use opentelemetry_semantic_conventions::metric::{HTTP_SERVER_ACTIVE_REQUESTS, HTTP_SERVER_REQUEST_DURATION, HTTP_SERVER_REQUEST_BODY_SIZE, HTTP_SERVER_RESPONSE_BODY_SIZE};
 
 use tower::{Layer, Service};
 
@@ -115,9 +116,9 @@ use pin_project_lite::pin_project; // for `Body::size_hint`
 pub struct Metric {
     pub req_duration: Histogram<f64>,
 
-    pub req_size: Histogram<u64>,
+    pub req_body_size: Histogram<u64>,
 
-    pub res_size: Histogram<u64>,
+    pub res_body_size: Histogram<u64>,
 
     pub req_active: UpDownCounter<i64>,
 }
@@ -271,21 +272,21 @@ impl HttpMetricsLayerBuilder {
         );
 
         let req_duration = meter
-            .f64_histogram("http.server.request.duration")
+            .f64_histogram(HTTP_SERVER_REQUEST_DURATION)
             .with_unit("s")
             .with_description("The HTTP request latencies in seconds.")
             .with_boundaries(duration_buckets)
             .build();
 
         let req_size = meter
-            .u64_histogram("http.server.request.size")
+            .u64_histogram(HTTP_SERVER_REQUEST_BODY_SIZE)
             .with_unit("By")
             .with_description("The HTTP request sizes in bytes.")
             .with_boundaries(size_buckets.clone())
             .build();
 
         let res_size = meter
-            .u64_histogram("http.server.response.size")
+            .u64_histogram(HTTP_SERVER_RESPONSE_BODY_SIZE)
             .with_unit("By")
             .with_description("The HTTP response sizes in bytes.")
             .with_boundaries(size_buckets)
@@ -293,15 +294,15 @@ impl HttpMetricsLayerBuilder {
 
         // no u64_up_down_counter because up_down_counter maybe < 0 since it allow negative values
         let req_active = meter
-            .i64_up_down_counter("http.server.active_requests")
+            .i64_up_down_counter(HTTP_SERVER_ACTIVE_REQUESTS)
             .with_description("The number of active HTTP requests.")
             .build();
 
         let meter_state = MetricState {
             metric: Metric {
                 req_duration,
-                req_size,
-                res_size,
+                req_body_size: req_size,
+                res_body_size: res_size,
                 req_active,
             },
             skipper: self.skipper,
@@ -334,7 +335,7 @@ pin_project! {
         method: String,
         url_scheme: String,
         host: String,
-        req_size: u64,
+        req_body_size: u64,
     }
 }
 
@@ -395,7 +396,7 @@ where
             .unwrap_or("unknown")
             .to_string();
 
-        let req_size = compute_approximate_request_size(&req);
+        let req_body_size = compute_request_body_size(&req);
 
         // for scheme, see github.com/labstack/echo/v4@v4.11.1/context.go
         // we can not use req.uri().scheme() since for non-absolute uri, it is always None
@@ -406,7 +407,7 @@ where
             method,
             path,
             host,
-            req_size: req_size as u64,
+            req_body_size: req_body_size as u64,
             state: self.state.clone(),
             url_scheme,
         }
@@ -436,6 +437,14 @@ fn compute_approximate_request_size<T>(req: &Request<T>) -> usize {
     s
 }
 
+fn compute_request_body_size<T>(req: &Request<T>) -> usize {
+    req
+        .headers()
+        .get(http::header::CONTENT_LENGTH)
+        .map(|v| v.to_str().unwrap().parse::<usize>().unwrap_or(0))
+        .unwrap_or(0)
+}
+
 impl<F, B: httpBody, E> Future for ResponseFuture<F>
 where
     F: Future<Output = Result<Response<B>, E>>,
@@ -461,7 +470,7 @@ where
         let latency = this.start.elapsed().as_secs_f64();
         let status = response.status().as_u16().to_string();
 
-        let res_size = response.body().size_hint().upper().unwrap_or(0);
+        let res_body_size = response.body().size_hint().upper().unwrap_or(0);
 
         let labels = [
             KeyValue::new("http.request.method", this.method.clone()),
@@ -475,9 +484,9 @@ where
             // 3. Host identifier of the Host header
             KeyValue::new("server.address", this.host.clone()),
         ];
-        this.state.metric.req_size.record(*this.req_size, &labels);
+        this.state.metric.req_body_size.record(*this.req_body_size, &labels);
 
-        this.state.metric.res_size.record(res_size, &labels);
+        this.state.metric.res_body_size.record(res_body_size, &labels);
 
         this.state.metric.req_duration.record(latency, &labels);
 

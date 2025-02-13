@@ -89,23 +89,21 @@ http_server_request_duration_seconds_sum
 http_server_request_duration_seconds_count
 ```
 
-`http_server_request_size_bytes` **histogram**
+`http_server_request_body_size_bytes` **histogram**
 ```
-http_server_request_size_bytes_bucket
-http_server_request_size_bytes_sum
-http_server_request_size_bytes_count
-```
-
-`http_server_response_size_bytes_` **histogram**
-```
-http_server_response_size_bytes_bucket
-http_server_response_size_bytes_sum
-http_server_response_size_bytes_count
+http_server_request_body_size_bytes_bucket
+http_server_request_body_size_bytes_sum
+http_server_request_body_size_bytes_count
 ```
 
-labels for `requests_total`,
-`http_server_request_duration_seconds`, `http_server_request_size_bytes`,
-`http_server_response_size_bytes` :
+`http_server_response_body_size_bytes` **histogram**
+```
+http_server_response_body_size_bytes_bucket
+http_server_response_body_size_bytes_sum
+http_server_response_body_size_bytes_count
+```
+
+labels for `http_server_request_duration_seconds`, `http_server_request_body_size_bytes`, `http_server_response_body_size_bytes` :
 
 ```
 http_request_method
