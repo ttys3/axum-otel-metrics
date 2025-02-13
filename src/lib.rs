@@ -9,17 +9,17 @@
 //! use axum_otel_metrics::HttpMetricsLayerBuilder;
 //! use axum::{response::Html, routing::get, Router};
 //! use opentelemetry_sdk::metrics::{PeriodicReader, SdkMeterProvider, Temporality};
-//!
+//! use opentelemetry::global;
+//! 
 //! let exporter = opentelemetry_otlp::MetricExporter::builder()
 //!     .with_http()
 //!     .with_temporality(Temporality::default())
 //!     .build()
 //!     .unwrap();
 //!
-//! let reader = PeriodicReader::builder(exporter, opentelemetry_sdk::runtime::Tokio)
+//! let reader = PeriodicReader::builder(exporter)
 //!     .with_interval(std::time::Duration::from_secs(30))
-//!     .build()
-//!     .unwrap();
+//!     .build();
 //!
 //! let provider = opentelemetry_sdk::metrics::SdkMeterProvider::builder()
 //!     .with_reader(reader)
@@ -539,6 +539,7 @@ mod tests {
 
         counter.add(100, &[KeyValue::new("key", "value")]);
         recorder.record(100, &[KeyValue::new("key", "value")]);
+        provider.force_flush().unwrap();
 
         // Encode data as text or protobuf
         let encoder = TextEncoder::new();
@@ -546,6 +547,7 @@ mod tests {
         let mut result = Vec::new();
         encoder.encode(&metric_families, &mut result).expect("encode failed");
         println!("{}", String::from_utf8(result).unwrap());
+        provider.shutdown().unwrap();
     }
 
     #[tokio::test]
@@ -582,6 +584,8 @@ mod tests {
             String::from_utf8(response.as_bytes().to_vec()).unwrap()
         );
 
+        provider.force_flush().unwrap();
+
         let response = server.get("/metrics").await;
         assert_eq!(response.status_code(), 200);
 
@@ -590,6 +594,7 @@ mod tests {
 
         assert!(!metrics_str.contains("http_route=\"/skip\""));
         assert!(metrics_str.contains("http_route=\"/record\""));
+        provider.shutdown().unwrap();
     }
 
     #[tokio::test]
@@ -624,6 +629,8 @@ mod tests {
         let response = server.get("/test").await;
         assert_eq!(response.status_code(), 200);
 
+        provider.force_flush().unwrap();
+
         // Get the metrics output
         let encoder = TextEncoder::new();
         let metric_families = registry.gather();
@@ -632,7 +639,7 @@ mod tests {
         let metrics_str = String::from_utf8(output).unwrap();
 
         // print the metrics output
-        println!("metrics_str: {:?}", metrics_str);
+        println!("test_custom_buckets metrics_str: {:}", metrics_str);
 
         // Verify that our custom buckets are present in the output
         // Duration buckets
@@ -652,6 +659,8 @@ mod tests {
                 bucket
             );
         }
+
+        provider.shutdown().unwrap();
     }
 
     #[tokio::test]
@@ -676,12 +685,15 @@ mod tests {
         let response = server.get("/test").await;
         assert_eq!(response.status_code(), 200);
 
+        provider.force_flush().unwrap();
+
         // Get the metrics output
         let encoder = TextEncoder::new();
         let metric_families = registry.gather();
         let mut output = Vec::new();
         encoder.encode(&metric_families, &mut output).unwrap();
         let metrics_str = String::from_utf8(output).unwrap();
+        println!("test_default_buckets metrics_str: {:}", metrics_str);
 
         // Verify that default buckets are present
         for bucket in HTTP_REQ_DURATION_HISTOGRAM_BUCKETS {
@@ -699,5 +711,7 @@ mod tests {
                 bucket
             );
         }
+
+        provider.shutdown().unwrap();
     }
 }
