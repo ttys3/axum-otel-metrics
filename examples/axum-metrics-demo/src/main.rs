@@ -13,6 +13,7 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use opentelemetry::metrics::Counter;
 use opentelemetry::{global, KeyValue};
+use opentelemetry_semantic_conventions::attribute::{DEPLOYMENT_ENVIRONMENT_NAME, SERVICE_VERSION};
 use prometheus::{Encoder, TextEncoder};
 
 mod sub;
@@ -32,17 +33,59 @@ async fn main() {
         .with(tracing_subscriber::fmt::layer())
         .init();
 
-    let metrics = HttpMetricsLayerBuilder::new()
-        .with_service_name(env!("CARGO_PKG_NAME").to_string())
-        .with_service_version(env!("CARGO_PKG_VERSION").to_string())
-        .with_target_labels(vec![KeyValue::new("env", "dev")])
-        .with_skipper(PathSkipper::new(|s| s.starts_with("/skip")))
-        .with_metric_reader(
+    let exporter = match std::env::var("USE_NAMESPACED_METRICS").unwrap_or_default().parse::<bool>() {
+        Ok(true) => {
+            eprintln!("use prometheus with namespaced metrics");
+            let example_metrics = r##"
+example metrics:
+axum_metrics_demo_http_server_active_requests{http_request_method="GET",url_scheme="http"} 1
+"##;
+            eprintln!("{}", example_metrics);
+            eprintln!("you can set USE_NAMESPACED_METRICS=false to use scoped metrics");
+            opentelemetry_prometheus::exporter()
+                .with_registry(prometheus::default_registry().clone())
+                // with prometheus namespace, we will get metrics like `axum_metrics_demo_http_server_active_requests`
+                .with_namespace(env!("CARGO_PKG_NAME").replace("-", "_"))
+                // do not include `otel_scope_name` and `otel_scope_version` in metrics if we use prometheus namespace
+                // otherwise (without prometheus namespace), we will get metrics like `http_server_active_requests_total`,
+                // so the scope info is required to match the metrics for specific service
+                .without_scope_info()
+                .build()
+                .unwrap()
+        }
+        _ => {
+            eprintln!("use prometheus with scoped metrics");
+            let example_metrics = r##"
+example metrics:
+http_server_active_requests{{http_request_method="GET",url_scheme="http",otel_scope_name="axum-otel-metrics",otel_scope_version="0.9.1"}} 1
+            "##;
+            eprintln!("{}", example_metrics);
+            eprintln!("you can set USE_NAMESPACED_METRICS=true to use namespaced metrics");
             opentelemetry_prometheus::exporter()
                 .with_registry(prometheus::default_registry().clone())
                 .build()
                 .unwrap()
-        )
+        }
+    };
+
+    let resource = opentelemetry_sdk::Resource::builder()
+        .with_service_name(env!("CARGO_PKG_NAME").to_string())
+        .with_attributes(vec![
+            KeyValue::new(SERVICE_VERSION, env!("CARGO_PKG_VERSION").to_string()),
+            KeyValue::new(DEPLOYMENT_ENVIRONMENT_NAME, "dev"),
+        ])
+        .build();
+
+    let provider = opentelemetry_sdk::metrics::SdkMeterProvider::builder()
+        .with_reader(exporter)
+        .with_resource(resource)
+        .build();
+    // TODO: defer ensure run `provider.shutdown()?;`
+
+    global::set_meter_provider(provider.clone());
+
+    let metrics = HttpMetricsLayerBuilder::new()
+        .with_skipper(PathSkipper::new(|s| s.starts_with("/skip")))
         .build();
 
     let state = SharedState {
@@ -86,24 +129,24 @@ async fn set_header<B>(mut response: Response<B>) -> Response<B> {
 }
 
 async fn handler(state: State<SharedState>, path: MatchedPath) -> Html<String> {
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
 
     // 1024 / 16 = 64
-    let n_bytes = rng.gen_range(1..5120 * 64); // 16 bytes to 5120 KB
+    let n_bytes = rng.random_range(1..5120 * 64); // 16 bytes to 5120 KB
     let mut dummy = "123456789abcdef".repeat(n_bytes);
 
     let delay_ms: u64;
     match path.as_str() {
         "/hello" => {
-            delay_ms = rng.gen_range(0..300);
+            delay_ms = rng.random_range(0..300);
             std::thread::sleep(time::Duration::from_millis(delay_ms))
         }
         "/world" => {
-            delay_ms = rng.gen_range(0..500);
+            delay_ms = rng.random_range(0..500);
             std::thread::sleep(time::Duration::from_millis(delay_ms))
         }
         _ => {
-            delay_ms = rng.gen_range(0..100);
+            delay_ms = rng.random_range(0..100);
             std::thread::sleep(time::Duration::from_millis(delay_ms));
             dummy = "".to_string();
         }
