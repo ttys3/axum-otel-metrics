@@ -235,6 +235,7 @@ pub struct HttpMetricsLayerBuilder {
     is_tls: bool,
     duration_buckets: Option<Vec<f64>>,
     size_buckets: Option<Vec<f64>>,
+    provider: Option<Arc<dyn opentelemetry::metrics::MeterProvider + Send + Sync>>,
 }
 
 impl HttpMetricsLayerBuilder {
@@ -257,8 +258,19 @@ impl HttpMetricsLayerBuilder {
         self
     }
 
+    pub fn with_provider<P>(mut self, provider: P) -> Self
+    where
+        P: opentelemetry::metrics::MeterProvider + Send + Sync + 'static,
+    {
+        self.provider = Some(Arc::new(provider));
+        self
+    }
+
     pub fn build(self) -> HttpMetricsLayer {
-        let provider = global::meter_provider();
+        let provider = self.provider.unwrap_or_else(|| {
+            global::meter_provider()
+        });
+
         let meter = provider.meter_with_scope(
             opentelemetry::InstrumentationScope::builder(env!("CARGO_PKG_NAME"))
                 .with_version(env!("CARGO_PKG_VERSION"))
@@ -557,10 +569,10 @@ mod tests {
             .build()
             .unwrap();
         let provider = SdkMeterProvider::builder().with_reader(exporter).build();
-        global::set_meter_provider(provider.clone());
 
         let metrics = HttpMetricsLayerBuilder::new()
             .with_skipper(crate::PathSkipper::new_with_fn(Arc::new(|s: &str| s.starts_with("/skip"))))
+            .with_provider(provider.clone())
             .build();
 
         let app: Router = Router::new()
@@ -609,12 +621,11 @@ mod tests {
             .build()
             .unwrap();
         let provider = SdkMeterProvider::builder().with_reader(exporter).build();
-        global::set_meter_provider(provider.clone());
 
-        // Create metrics layer with custom buckets
         let metrics = HttpMetricsLayerBuilder::new()
             .with_duration_buckets(custom_duration_buckets.clone())
             .with_size_buckets(custom_size_buckets.clone())
+            .with_provider(provider.clone())
             .build();
 
         let app = Router::<()>::new()
@@ -671,10 +682,10 @@ mod tests {
             .build()
             .unwrap();
         let provider = SdkMeterProvider::builder().with_reader(exporter).build();
-        global::set_meter_provider(provider.clone());
 
-        // Create metrics layer with default buckets
-        let metrics = HttpMetricsLayerBuilder::new().build();
+        let metrics = HttpMetricsLayerBuilder::new()
+            .with_provider(provider.clone())
+            .build();
 
         let app = Router::<()>::new().route("/test", get(|| async { "test" })).layer(metrics);
 
