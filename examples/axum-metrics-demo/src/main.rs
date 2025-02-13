@@ -86,6 +86,10 @@ http_server_active_requests{{http_request_method="GET",url_scheme="http",otel_sc
 
     let metrics = HttpMetricsLayerBuilder::new()
         .with_skipper(PathSkipper::new(|s| s.starts_with("/skip")))
+        // from 5 bytes to 500 bytes
+        .with_size_buckets(vec![5.0, 20.0, 50.0, 100.0, 500.0])
+        // from 1ms to 100ms
+        .with_duration_buckets(vec![0.001, 0.005, 0.01, 0.05, 0.1])
         .build();
 
     let state = SharedState {
@@ -131,38 +135,47 @@ async fn set_header<B>(mut response: Response<B>) -> Response<B> {
 async fn handler(state: State<SharedState>, path: MatchedPath) -> Html<String> {
     let mut rng = rand::rng();
 
-    // 1024 / 16 = 64
-    let n_bytes = rng.random_range(1..5120 * 64); // 16 bytes to 5120 KB
-    let mut dummy = "123456789abcdef".repeat(n_bytes);
+    // Default size covers all buckets (5-500 bytes)
+    let n_bytes = rng.random_range(1..=500);
+    let mut dummy = ".".repeat(n_bytes);
 
     let delay_ms: u64;
     match path.as_str() {
         "/hello" => {
-            delay_ms = rng.random_range(0..300);
+            // Small responses (1-20 bytes) covering first two buckets
+            let n_bytes = rng.random_range(1..=20);
+            dummy = ".".repeat(n_bytes);
+            // Quick responses (0-10ms) covering first three duration buckets
+            delay_ms = rng.random_range(0..=10);
             std::thread::sleep(time::Duration::from_millis(delay_ms))
         }
         "/world" => {
-            delay_ms = rng.random_range(0..500);
+            // Medium responses (20-100 bytes) covering middle buckets
+            let n_bytes = rng.random_range(20..=100);
+            dummy = ".".repeat(n_bytes);
+            // Medium latency (10-50ms) covering middle duration buckets
+            delay_ms = rng.random_range(10..=50);
             std::thread::sleep(time::Duration::from_millis(delay_ms))
         }
         _ => {
-            delay_ms = rng.random_range(0..100);
+            // Larger responses and higher latency for default route
+            // covering all buckets including the highest ones
+            delay_ms = rng.random_range(50..=100);
             std::thread::sleep(time::Duration::from_millis(delay_ms));
-            dummy = "".to_string();
         }
     }
 
     state.foobar.add(1, &[KeyValue::new("attr1", "foo")]);
 
     Html(format!(
-        "<h1>Request path: {}</h1> <hr />\nroot_dir={}\nsleep_ms={}\n\
-    <hr /><a href='/' style='display: inline-block; width: 100px;'>/</a>\n\
-    <a href='/hello' style='display: inline-block; width: 100px;'>/hello</a>\n\
-    <a href='/world' style='display: inline-block; width: 100px;'>/world</a>\n\
-    <a href='/sub/sub1' style='display: inline-block; width: 100px;'>/sub/sub1</a>\n\
-    <a href='/sub/sub2' style='display: inline-block; width: 100px;'>/sub/sub2</a>\n\
-    <a href='/skip-this' style='display: inline-block; width: 100px;'>/skip-this</a>\n\
-    <hr /><a href='/metrics'>/metrics</a>{}\n\n",
+    "\n\n<h1>Request path: {}</h1> <hr />\nroot_dir={}\nsleep_ms={}\n\
+    <hr /><a href='/'>/</a>\n\
+    <a href='/hello'>/hello</a>\n\
+    <a href='/world'>/world</a>\n\
+    <a href='/sub/sub1'>/sub/sub1</a>\n\
+    <a href='/sub/sub2'>/sub/sub2</a>\n\
+    <a href='/skip-this'>/skip-this</a>\n\
+    <hr /><a href='/metrics'>/metrics</a>\n<hr /> {} \n\n",
         path.as_str(),
         state.root_dir,
         delay_ms,
