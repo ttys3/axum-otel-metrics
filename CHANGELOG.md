@@ -15,13 +15,15 @@ All notable changes to this project will be documented in this file.
 - Derive default for HttpMetricsLayerBuilder (9195432)
 - Axum prom example: update dependencies and refactor code (0d4ace0)
 - *(example)* Refine response size and latency bucketing (202f098)
+- *(metrics)* [**breaking**] Follow latest opentelemetry semantic conventions (7657ca9)
 
 ### 📚 Documentation
 
 - Update CHANGELOG.md (2dba44e)
 - Update changelog template formatting (3258d03)
 - Update CHANGELOG.md (b7110e8)
-- Update CHANGELOG.md (85c10a2)
+- Update CHANGELOG.md (b5df24c)
+- Enhance otlp exporter usage instructions (e3a7154)
 
 ### ⚙️ Miscellaneous Tasks
 
