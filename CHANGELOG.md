@@ -15,7 +15,7 @@ All notable changes to this project will be documented in this file.
 - Derive default for HttpMetricsLayerBuilder (9195432)
 - Axum prom example: update dependencies and refactor code (0d4ace0)
 - *(example)* Refine response size and latency bucketing (202f098)
-- *(metrics)* [**breaking**] Follow latest opentelemetry semantic conventions (7657ca9)
+- *(metrics)* [**breaking**] Follow latest opentelemetry semantic conventions (31a8847)
 
 ### 📚 Documentation
 
@@ -24,6 +24,7 @@ All notable changes to this project will be documented in this file.
 - Update CHANGELOG.md (b7110e8)
 - Update CHANGELOG.md (b5df24c)
 - Enhance otlp exporter usage instructions (e3a7154)
+- Update CHANGELOG.md (4d10531)
 
 ### ⚙️ Miscellaneous Tasks
 
@@ -32,6 +33,7 @@ All notable changes to this project will be documented in this file.
 - Add changelog command to Makefile (96518b3)
 - [**breaking**] Update dependencies in Cargo.toml (92549ca)
 - Update examples .gitignore to track Cargo.lock to avoid release-plz complain (fb95204)
+- Add release-plz shell script (b1b702b)
 
 ## [0.9.1] - 2025-02-13
 
