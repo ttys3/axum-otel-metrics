@@ -16,6 +16,7 @@ All notable changes to this project will be documented in this file.
 - Axum prom example: update dependencies and refactor code (0d4ace0)
 - *(example)* Refine response size and latency bucketing (202f098)
 - *(metrics)* [**breaking**] Follow latest opentelemetry semantic conventions (31a8847)
+- Add support for custom meter provider in HttpMetricsLayerBuilder, so the tests will not fail anymore (e11478d)
 
 ### 📚 Documentation
 
@@ -25,6 +26,16 @@ All notable changes to this project will be documented in this file.
 - Update CHANGELOG.md (b5df24c)
 - Enhance otlp exporter usage instructions (e3a7154)
 - Update CHANGELOG.md (4d10531)
+- Update CHANGELOG.md (54b4518)
+- Update CHANGELOG.md (bb9d25c)
+
+### 🎨 Styling
+
+- Reformat code for better readability (cfe2044)
+
+### 🧪 Testing
+
+- Fix tests (dd7c141)
 
 ### ⚙️ Miscellaneous Tasks
 
