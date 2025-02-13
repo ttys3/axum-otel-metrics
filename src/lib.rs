@@ -1,14 +1,34 @@
 //! [axum](https://github.com/tokio-rs/axum) OpenTelemetry Metrics middleware
 //!
-//! ## Simple Usage
+//! ## Simple Usage: with otlp exporter
 //!
-//! Meter provider should be configured through [opentelemetry_sdk `global::set_meter_provider`](https://docs.rs/opentelemetry/0.27.1/opentelemetry/global/index.html#global-metrics-api).
+//! Meter provider should be configured through [opentelemetry_sdk `global::set_meter_provider`](https://docs.rs/opentelemetry/0.28.0/opentelemetry/global/index.html#global-metrics-api).
 //! if you want to use the [prometheus exporter](https://opentelemetry.io/docs/specs/otel/metrics/sdk_exporters/prometheus/), see [Advanced Usage](#advanced-usage) below.
 //!
 //! ```
 //! use axum_otel_metrics::HttpMetricsLayerBuilder;
 //! use axum::{response::Html, routing::get, Router};
+//! use opentelemetry_sdk::metrics::{PeriodicReader, SdkMeterProvider, Temporality};
+//! 
+//! let exporter = opentelemetry_otlp::MetricExporter::builder()
+//!     .with_http()
+//!     .with_temporality(Temporality::default())
+//!     .build()
+//!     .unwrap();
+//! 
+//! let reader = PeriodicReader::builder(exporter, opentelemetry_sdk::runtime::Tokio)
+//!     .with_interval(std::time::Duration::from_secs(30))
+//!     .build()
+//!     .unwrap();
 //!
+//! let provider = opentelemetry_sdk::metrics::SdkMeterProvider::builder()
+//!     .with_reader(reader)
+//!     .build();
+//!
+//!  // TODO: ensure defer run `provider.shutdown()?;`
+//!
+//! global::set_meter_provider(provider.clone());
+//! 
 //! let metrics = HttpMetricsLayerBuilder::new()
 //!     .build();
 //!
@@ -24,7 +44,7 @@
 //! }
 //! ```
 //!
-//! ## Advanced Usage
+//! ## Advanced Usage: with prometheus exporter
 //!
 //! this is an example to use the [prometheus exporter](https://opentelemetry.io/docs/specs/otel/metrics/sdk_exporters/prometheus/)
 //!
@@ -38,8 +58,14 @@
 //! use opentelemetry_sdk::metrics::SdkMeterProvider;
 //! use prometheus::{Encoder, Registry, TextEncoder};
 //!
-//! let exporter = opentelemetry_prometheus::exporter().with_registry(prometheus::default_registry().clone()).build().unwrap();
+//! let exporter = opentelemetry_prometheus::exporter()
+//!     .with_registry(prometheus::default_registry().clone())
+//!     .build()
+//!     .unwrap();
+//!
 //! let provider = SdkMeterProvider::builder().with_reader(exporter).build();
+//! // TODO: ensure defer run `provider.shutdown()?;`
+//! 
 //! global::set_meter_provider(provider.clone());
 //!
 //! let metrics = HttpMetricsLayerBuilder::new().build();

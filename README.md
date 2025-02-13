@@ -38,6 +38,27 @@ HTTP: `http://localhost:4318/v1/metrics`
 
 ```rust
 use axum_otel_metrics::HttpMetricsLayerBuilder;
+use axum::{response::Html, routing::get, Router};
+use opentelemetry_sdk::metrics::{PeriodicReader, SdkMeterProvider, Temporality};
+ 
+let exporter = opentelemetry_otlp::MetricExporter::builder()
+    .with_http()
+    .with_temporality(Temporality::default())
+    .build()
+    .unwrap();
+ 
+let reader = PeriodicReader::builder(exporter, opentelemetry_sdk::runtime::Tokio)
+    .with_interval(std::time::Duration::from_secs(30))
+    .build()
+    .unwrap();
+
+let provider = opentelemetry_sdk::metrics::SdkMeterProvider::builder()
+    .with_reader(reader)
+    .build();
+
+ // TODO: ensure defer run `provider.shutdown()?;`
+
+global::set_meter_provider(provider.clone());
 
 let metrics = HttpMetricsLayerBuilder::new()
     .build();

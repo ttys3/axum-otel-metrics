@@ -80,7 +80,7 @@ http_server_active_requests{{http_request_method="GET",url_scheme="http",otel_sc
         .with_reader(exporter)
         .with_resource(resource)
         .build();
-    // TODO: defer ensure run `provider.shutdown()?;`
+    // TODO: ensure defer run `provider.shutdown()?;`
 
     global::set_meter_provider(provider.clone());
 
