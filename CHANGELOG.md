@@ -4,6 +4,26 @@ All notable changes to this project will be documented in this file.
 
 ## [unreleased]
 
+## [0.9.2](https://github.com/ttys3/axum-otel-metrics/compare/v0.9.1...v0.9.2) - 2025-02-13
+
+### Added
+
+- *(metrics)* add custom bucket support for http metrics layer
+- add changelog command to Makefile
+- add default configuration for git-cliff
+
+### Other
+
+- update CHANGELOG.md
+- update changelog template formatting
+- update CHANGELOG.md
+- update dependencies in Cargo.toml
+- derive default for HttpMetricsLayerBuilder
+- *(metrics)* remove requests_total counter and related code
+- remove provider configuration from builder logic
+- *(deps)* update axum requirement from 0.7 to 0.8
+- fix typo
+
 ### 🚀 Features
 
 - Add default configuration for git-cliff (7fbaefa)
