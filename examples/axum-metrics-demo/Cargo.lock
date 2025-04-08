@@ -103,10 +103,10 @@ version = "0.1.1"
 dependencies = [
  "axum",
  "axum-otel-metrics",
- "opentelemetry",
+ "opentelemetry 0.28.0",
  "opentelemetry-prometheus",
- "opentelemetry-semantic-conventions",
- "opentelemetry_sdk",
+ "opentelemetry-semantic-conventions 0.28.0",
+ "opentelemetry_sdk 0.28.0",
  "prometheus",
  "rand 0.9.0",
  "tokio",
@@ -116,14 +116,15 @@ dependencies = [
 
 [[package]]
 name = "axum-otel-metrics"
-version = "0.9.1"
+version = "0.10.0"
 dependencies = [
  "axum",
  "futures-util",
  "http",
  "http-body",
- "opentelemetry",
- "opentelemetry_sdk",
+ "opentelemetry 0.29.1",
+ "opentelemetry-semantic-conventions 0.29.0",
+ "opentelemetry_sdk 0.29.0",
  "pin-project-lite",
  "tower",
 ]
@@ -499,14 +500,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "opentelemetry"
+version = "0.29.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9e87237e2775f74896f9ad219d26a2081751187eb7c9f5c58dde20a23b95d16c"
+dependencies = [
+ "futures-core",
+ "futures-sink",
+ "js-sys",
+ "pin-project-lite",
+ "thiserror 2.0.11",
+ "tracing",
+]
+
+[[package]]
 name = "opentelemetry-prometheus"
 version = "0.28.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "765a76ba13ec77043903322f85dc5434d7d01a37e75536d0f871ed7b9b5bbf0d"
 dependencies = [
  "once_cell",
- "opentelemetry",
- "opentelemetry_sdk",
+ "opentelemetry 0.28.0",
+ "opentelemetry_sdk 0.28.0",
  "prometheus",
  "protobuf",
  "tracing",
@@ -519,6 +534,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2fb3a2f78c2d55362cd6c313b8abedfbc0142ab3c2676822068fd2ab7d51f9b7"
 
 [[package]]
+name = "opentelemetry-semantic-conventions"
+version = "0.29.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "84b29a9f89f1a954936d5aa92f19b2feec3c8f3971d3e96206640db7f9706ae3"
+
+[[package]]
 name = "opentelemetry_sdk"
 version = "0.28.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -529,9 +550,27 @@ dependencies = [
  "futures-executor",
  "futures-util",
  "glob",
- "opentelemetry",
+ "opentelemetry 0.28.0",
  "percent-encoding",
  "rand 0.8.5",
+ "serde_json",
+ "thiserror 2.0.11",
+ "tracing",
+]
+
+[[package]]
+name = "opentelemetry_sdk"
+version = "0.29.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "afdefb21d1d47394abc1ba6c57363ab141be19e27cc70d0e422b7f303e4d290b"
+dependencies = [
+ "futures-channel",
+ "futures-executor",
+ "futures-util",
+ "glob",
+ "opentelemetry 0.29.1",
+ "percent-encoding",
+ "rand 0.9.0",
  "serde_json",
  "thiserror 2.0.11",
  "tracing",
@@ -936,9 +975,9 @@ dependencies = [
 
 [[package]]
 name = "tokio"
-version = "1.43.0"
+version = "1.43.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3d61fa4ffa3de412bfea335c6ecff681de2b609ba3c77ef3e00e521813a9ed9e"
+checksum = "492a604e2fd7f814268a378409e6c92b5525d747d10db9a229723f55a417958c"
 dependencies = [
  "backtrace",
  "bytes",
