@@ -21,7 +21,8 @@ follows [Semantic Conventions for HTTP Metrics](https://github.com/open-telemetr
 > instead. Prometheus [natively supports
 > OTLP](https://prometheus.io/docs/guides/opentelemetry/#enable-the-otlp-receiver),
 > providing a more stable and actively maintained solution.
-> please check https://github.com/open-telemetry/opentelemetry-rust/blob/opentelemetry-0.30.0/opentelemetry-prometheus/README.md for more details.
+> for more details please check https://github.com/open-telemetry/opentelemetry-rust/blob/opentelemetry-0.30.0/opentelemetry-prometheus/README.md
+> and https://github.com/ttys3/axum-otel-metrics/issues/176
 
 
 ## Usage
