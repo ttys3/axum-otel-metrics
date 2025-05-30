@@ -10,6 +10,20 @@ follows [Semantic Conventions for HTTP Metrics](https://github.com/open-telemetr
 
 [axum](https://github.com/tokio-rs/axum) is an ergonomic and modular web framework built with Tokio, Tower, and Hyper
 
+## Note: Prometheus exporter is removed now
+
+> Development of the Prometheus exporter has been discontinued. See the related
+> [issue](https://github.com/open-telemetry/opentelemetry-rust/issues/2451). This
+> crate depends on the unmaintained `protobuf` crate and has unresolved security
+> vulnerabilities. Version 0.29 will be the final release.
+> 
+> For Prometheus integration, we strongly recommend using the [OTLP] exporter
+> instead. Prometheus [natively supports
+> OTLP](https://prometheus.io/docs/guides/opentelemetry/#enable-the-otlp-receiver),
+> providing a more stable and actively maintained solution.
+> please check https://github.com/open-telemetry/opentelemetry-rust/blob/opentelemetry-0.30.0/opentelemetry-prometheus/README.md for more details.
+
+
 ## Usage
 
 Uses the [OTLP Exporter](https://opentelemetry.io/docs/specs/otel/metrics/sdk_exporters/otlp/) to send metrics to OpenTelemetry collector.
@@ -107,6 +121,9 @@ https://opentelemetry.io/docs/reference/specification/metrics/sdk_exporters/
 - In-memory https://opentelemetry.io/docs/reference/specification/metrics/sdk_exporters/in-memory/
 - OTLP https://opentelemetry.io/docs/reference/specification/metrics/sdk_exporters/otlp/
 - Standard output https://opentelemetry.io/docs/reference/specification/metrics/sdk_exporters/stdout/
+
+where is prometheus exporter?
+
 
 ## Metrics Data Model
 
