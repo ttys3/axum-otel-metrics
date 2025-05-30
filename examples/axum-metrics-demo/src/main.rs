@@ -14,7 +14,7 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use opentelemetry::metrics::Counter;
 use opentelemetry::{global, KeyValue};
 use opentelemetry_semantic_conventions::attribute::{DEPLOYMENT_ENVIRONMENT_NAME, SERVICE_VERSION};
-use prometheus::{Encoder, TextEncoder};
+use opentelemetry_sdk::metrics::{PeriodicReader, SdkMeterProvider, Temporality};
 
 mod sub;
 
@@ -33,40 +33,17 @@ async fn main() {
         .with(tracing_subscriber::fmt::layer())
         .init();
 
-    let exporter = match std::env::var("USE_NAMESPACED_METRICS").unwrap_or_default().parse::<bool>() {
-        Ok(true) => {
-            eprintln!("use prometheus with namespaced metrics");
-            let example_metrics = r##"
-example metrics:
-axum_metrics_demo_http_server_active_requests{http_request_method="GET",url_scheme="http"} 1
-"##;
-            eprintln!("{}", example_metrics);
-            eprintln!("you can set USE_NAMESPACED_METRICS=false to use scoped metrics");
-            opentelemetry_prometheus::exporter()
-                .with_registry(prometheus::default_registry().clone())
-                // with prometheus namespace, we will get metrics like `axum_metrics_demo_http_server_active_requests`
-                .with_namespace(env!("CARGO_PKG_NAME").replace("-", "_"))
-                // do not include `otel_scope_name` and `otel_scope_version` in metrics if we use prometheus namespace
-                // otherwise (without prometheus namespace), we will get metrics like `http_server_active_requests_total`,
-                // so the scope info is required to match the metrics for specific service
-                .without_scope_info()
-                .build()
-                .unwrap()
-        }
-        _ => {
-            eprintln!("use prometheus with scoped metrics");
-            let example_metrics = r##"
-example metrics:
-http_server_active_requests{{http_request_method="GET",url_scheme="http",otel_scope_name="axum-otel-metrics",otel_scope_version="0.9.1"}} 1
-            "##;
-            eprintln!("{}", example_metrics);
-            eprintln!("you can set USE_NAMESPACED_METRICS=true to use namespaced metrics");
-            opentelemetry_prometheus::exporter()
-                .with_registry(prometheus::default_registry().clone())
-                .build()
-                .unwrap()
-        }
-    };
+    println!("Using OTLP metrics exporter to send metrics to OpenTelemetry collector");
+
+    let exporter = opentelemetry_otlp::MetricExporter::builder()
+        .with_http()
+        .with_temporality(Temporality::default())
+        .build()
+        .unwrap();
+
+    let reader = PeriodicReader::builder(exporter)
+        .with_interval(std::time::Duration::from_secs(30))
+        .build();
 
     let resource = opentelemetry_sdk::Resource::builder()
         .with_service_name(env!("CARGO_PKG_NAME").to_string())
@@ -76,8 +53,8 @@ http_server_active_requests{{http_request_method="GET",url_scheme="http",otel_sc
         ])
         .build();
 
-    let provider = opentelemetry_sdk::metrics::SdkMeterProvider::builder()
-        .with_reader(exporter)
+    let provider = SdkMeterProvider::builder()
+        .with_reader(reader)
         .with_resource(resource)
         .build();
     // TODO: ensure defer run `provider.shutdown()?;`
@@ -99,16 +76,6 @@ http_server_active_requests{{http_request_method="GET",url_scheme="http",otel_sc
 
     // build our application with a route
     let app = Router::new()
-        .route(
-            "/metrics",
-            get(|| async {
-                let mut buffer = Vec::new();
-                let encoder = TextEncoder::new();
-                encoder.encode(&prometheus::gather(), &mut buffer).unwrap();
-                // return metrics
-                String::from_utf8(buffer).unwrap()
-            }),
-        )
         .nest("/sub", crate::sub::routes())
         .route("/", get(handler))
         .route("/hello", get(handler))
@@ -175,7 +142,7 @@ async fn handler(state: State<SharedState>, path: MatchedPath) -> Html<String> {
     <a href='/sub/sub1'>/sub/sub1</a>\n\
     <a href='/sub/sub2'>/sub/sub2</a>\n\
     <a href='/skip-this'>/skip-this</a>\n\
-    <hr /><a href='/metrics'>/metrics</a>\n<hr /> {} \n\n",
+    <hr /> {} \n\n",
         path.as_str(),
         state.root_dir,
         delay_ms,
