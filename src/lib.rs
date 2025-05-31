@@ -239,28 +239,28 @@ impl HttpMetricsLayerBuilder {
         let req_duration = meter
             .f64_histogram(HTTP_SERVER_REQUEST_DURATION)
             .with_unit("s")
-            .with_description("The HTTP request latencies in seconds.")
+            .with_description("Duration of HTTP server requests.")
             .with_boundaries(duration_buckets)
             .build();
 
         let req_size = meter
             .u64_histogram(HTTP_SERVER_REQUEST_BODY_SIZE)
             .with_unit("By")
-            .with_description("The HTTP request sizes in bytes.")
+            .with_description("Size of HTTP server request bodies.")
             .with_boundaries(size_buckets.clone())
             .build();
 
         let res_size = meter
             .u64_histogram(HTTP_SERVER_RESPONSE_BODY_SIZE)
             .with_unit("By")
-            .with_description("The HTTP response sizes in bytes.")
+            .with_description("Size of HTTP server response bodies.")
             .with_boundaries(size_buckets)
             .build();
 
         // no u64_up_down_counter because up_down_counter maybe < 0 since it allow negative values
         let req_active = meter
             .i64_up_down_counter(HTTP_SERVER_ACTIVE_REQUESTS)
-            .with_description("The number of active HTTP requests.")
+            .with_description("Number of active HTTP server requests.")
             .build();
 
         let meter_state = MetricState {
