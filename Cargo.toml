@@ -1,6 +1,6 @@
 [package]
 name = "axum-otel-metrics"
-version = "0.11.0"
+version = "0.12.0"
 edition = "2021"
 license = "MIT"
 description = "axum OpenTelemetry metrics middleware with OTLP exporter"
