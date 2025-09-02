@@ -42,7 +42,8 @@ async fn main() {
         .unwrap();
 
     let reader = PeriodicReader::builder(exporter)
-        .with_interval(std::time::Duration::from_secs(30))
+        // increase the interval to > 30 seconds if used in the production environment
+        .with_interval(std::time::Duration::from_secs(10))
         .build();
 
     let resource = opentelemetry_sdk::Resource::builder()
