@@ -9,10 +9,10 @@ publish = false
 axum-otel-metrics = { path = "../../" }
 #axum = { git = "https://github.com/tokio-rs/axum.git", branch = "main"}
 axum = "0.8"
-tokio = { version = "1.45", features = ["full", "tracing"] }
+tokio = { version = "1.47", features = ["full", "tracing"] }
 tracing = "0.1.41"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-rand = "0.9.1"
+rand = "0.9.2"
 opentelemetry = "0.30"
 opentelemetry_sdk = "0.30"
 opentelemetry-otlp = { version = "0.30", features = ["http-proto", "reqwest-client"] }
