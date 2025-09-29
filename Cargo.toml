@@ -14,7 +14,7 @@ exclude = [".github/*", "examples/*", "tests/*"]
 [dependencies]
 axum = "0.8"
 opentelemetry = { version = "0.30", features = ["metrics"] }
-opentelemetry_sdk = "0.30"
+opentelemetry_sdk = "0.31"
 opentelemetry-semantic-conventions = { version = "0.30", features = ["semconv_experimental"] }
 tower = "0.5"
 futures-util = "0.3"
@@ -24,7 +24,7 @@ http-body = "1.0"
 
 
 [dev-dependencies]
-opentelemetry_sdk = { version = "0.30.0", features = ["rt-tokio"] }
+opentelemetry_sdk = { version = "0.31.0", features = ["rt-tokio"] }
 tokio = { version = "1.47", features = ["macros"] }
 axum-test = "18.0.2"
 opentelemetry-otlp = { version = "0.30.0", features = ["tokio"] }
