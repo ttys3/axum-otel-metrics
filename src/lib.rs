@@ -327,7 +327,12 @@ where
                 } else if let Some(scheme) = req.headers().get("X-Forwarded-Protocol") {
                     return scheme.to_str().unwrap().to_string();
                 }
-                if req.headers().get("X-Forwarded-Ssl").is_some().to_string() == "on" {
+                if req
+                    .headers()
+                    .get("X-Forwarded-Ssl")
+                    .and_then(|v| v.to_str().ok())
+                    == Some("on")
+                {
                     return "https".to_string();
                 }
                 if let Some(scheme) = req.headers().get("X-Url-Scheme") {
