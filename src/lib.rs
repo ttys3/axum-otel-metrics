@@ -505,7 +505,7 @@ mod tests {
             .layer(metrics);
 
         // Create test server
-        let server = TestServer::new(app).unwrap();
+        let server = TestServer::new(app);
 
         // Make a test request
         let response = server.get("/skip").await;
@@ -542,7 +542,7 @@ mod tests {
             .layer(metrics);
 
         // Create test server
-        let server = TestServer::new(app).unwrap();
+        let server = TestServer::new(app);
 
         // Make a test request
         let response = server.get("/test").await;
@@ -566,7 +566,7 @@ mod tests {
             .layer(metrics);
 
         // Create test server
-        let server = TestServer::new(app).unwrap();
+        let server = TestServer::new(app);
 
         // Make a test request
         let response = server.get("/test").await;
@@ -590,7 +590,7 @@ mod tests {
             .layer(metrics);
 
         // Create test server
-        let server = TestServer::new(app).unwrap();
+        let server = TestServer::new(app);
 
         // Make multiple test requests to generate metrics
         for _ in 0..5 {

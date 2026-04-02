@@ -4,7 +4,7 @@ use axum::{
     routing::{get, post},
     Router,
 };
-use rand::Rng;
+use rand::RngExt;
 use std::time;
 
 use axum::response::Response;
