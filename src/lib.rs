@@ -2,7 +2,7 @@
 //!
 //! ## Simple Usage: with otlp exporter
 //!
-//! Meter provider should be configured through [opentelemetry_sdk `global::set_meter_provider`](https://docs.rs/opentelemetry/0.28.0/opentelemetry/global/index.html#global-metrics-api).
+//! Meter provider should be configured through [opentelemetry_sdk `global::set_meter_provider`](https://docs.rs/opentelemetry/latest/opentelemetry/global/index.html#global-metrics-api).
 //!
 //! ```
 //! use axum_otel_metrics::HttpMetricsLayerBuilder;
@@ -56,6 +56,9 @@ use std::time::Instant;
 use opentelemetry::global;
 use opentelemetry::metrics::{Histogram, UpDownCounter};
 use opentelemetry::KeyValue;
+use opentelemetry_semantic_conventions::attribute::{
+    HTTP_REQUEST_METHOD, HTTP_RESPONSE_STATUS_CODE, HTTP_ROUTE, SERVER_ADDRESS, URL_SCHEME,
+};
 use opentelemetry_semantic_conventions::metric::{
     HTTP_SERVER_ACTIVE_REQUESTS, HTTP_SERVER_REQUEST_BODY_SIZE, HTTP_SERVER_REQUEST_DURATION, HTTP_SERVER_RESPONSE_BODY_SIZE,
 };
@@ -66,7 +69,7 @@ use futures_util::ready;
 use http_body::Body as httpBody;
 use pin_project_lite::pin_project; // for `Body::size_hint`
 
-/// the metrics we used in the middleware
+/// OpenTelemetry metric instruments used by the middleware.
 #[derive(Clone)]
 pub struct Metric {
     pub req_duration: Histogram<f64>,
@@ -78,33 +81,30 @@ pub struct Metric {
     pub req_active: UpDownCounter<i64>,
 }
 
+/// Shared state holding metric instruments, path skipper, and TLS configuration.
 #[derive(Clone)]
 pub struct MetricState {
-    /// hold the metrics we used in the middleware
+    /// The metric instruments.
     pub metric: Metric,
 
-    /// PathSkipper used to skip some paths for not recording metrics
+    /// PathSkipper used to skip recording metrics for certain paths.
     skipper: PathSkipper,
 
-    /// whether the service is running as a TLS server or not.
-    /// this is used to help determine the `url.scheme` otel meter attribute.
-    /// because there is no way to get the scheme from the request in http server
-    /// (except for absolute uri request, but which is only used when as a proxy server).
+    /// Whether the service terminates TLS directly.
+    /// Used to determine the `url.scheme` attribute when no forwarded headers are present.
     is_tls: bool,
 }
 
-/// the service wrapper
+/// Tower [`Service`] wrapper that records OpenTelemetry HTTP server metrics.
 #[derive(Clone)]
 pub struct HttpMetrics<S> {
     pub(crate) state: MetricState,
-
-    /// inner service which is wrapped by this middleware
     service: S,
 }
 
+/// Tower [`Layer`] that wraps services with [`HttpMetrics`] for recording HTTP server metrics.
 #[derive(Clone)]
 pub struct HttpMetricsLayer {
-    /// the metric state, use both by the middleware handler and metrics export endpoint
     pub(crate) state: MetricState,
 }
 
@@ -182,6 +182,7 @@ impl Default for PathSkipper {
     }
 }
 
+/// Builder for constructing an [`HttpMetricsLayer`] with custom configuration.
 #[derive(Clone, Default)]
 pub struct HttpMetricsLayerBuilder {
     skipper: PathSkipper,
@@ -196,21 +197,32 @@ impl HttpMetricsLayerBuilder {
         HttpMetricsLayerBuilder::default()
     }
 
+    /// Set a custom [`PathSkipper`] to skip recording metrics for certain paths.
     pub fn with_skipper(mut self, skipper: PathSkipper) -> Self {
         self.skipper = skipper;
         self
     }
 
+    /// Set custom histogram bucket boundaries for request duration (in seconds).
     pub fn with_duration_buckets(mut self, buckets: Vec<f64>) -> Self {
         self.duration_buckets = Some(buckets);
         self
     }
 
+    /// Set custom histogram bucket boundaries for request/response body size (in bytes).
     pub fn with_size_buckets(mut self, buckets: Vec<f64>) -> Self {
         self.size_buckets = Some(buckets);
         self
     }
 
+    /// Set whether the server terminates TLS directly (without a reverse proxy).
+    /// When `true`, `url.scheme` is always `"https"`, skipping forwarded header detection.
+    pub fn with_tls(mut self, is_tls: bool) -> Self {
+        self.is_tls = is_tls;
+        self
+    }
+
+    /// Set a custom [`MeterProvider`](opentelemetry::metrics::MeterProvider). Defaults to the global provider.
     pub fn with_provider<P>(mut self, provider: P) -> Self
     where
         P: opentelemetry::metrics::MeterProvider + Send + Sync + 'static,
@@ -219,6 +231,7 @@ impl HttpMetricsLayerBuilder {
         self
     }
 
+    /// Build the [`HttpMetricsLayer`] with the configured settings.
     pub fn build(self) -> HttpMetricsLayer {
         let provider = self.provider.unwrap_or_else(|| {
             global::meter_provider()
@@ -296,10 +309,10 @@ pin_project! {
         inner: F,
         start: Instant,
         state: MetricState,
-        path: String,
-        method: String,
-        url_scheme: String,
-        host: String,
+        path: Arc<str>,
+        method: http::Method,
+        url_scheme: &'static str,
+        host: Arc<str>,
         req_body_size: u64,
     }
 }
@@ -318,58 +331,64 @@ where
     }
 
     fn call(&mut self, req: Request<R>) -> Self::Future {
-        let url_scheme = if self.state.is_tls {
-            "https".to_string()
+        // for scheme, see github.com/labstack/echo/v4@v4.11.1/context.go
+        // we can not use req.uri().scheme() since for non-absolute uri, it is always None
+        let url_scheme: &'static str = if self.state.is_tls {
+            "https"
         } else {
-            (|| {
-                if let Some(scheme) = req.headers().get("X-Forwarded-Proto") {
-                    return scheme.to_str().unwrap().to_string();
-                } else if let Some(scheme) = req.headers().get("X-Forwarded-Protocol") {
-                    return scheme.to_str().unwrap().to_string();
+            let forwarded = req.headers().get("X-Forwarded-Proto")
+                .and_then(|v| v.to_str().ok())
+                .or_else(|| req.headers().get("X-Forwarded-Protocol")
+                    .and_then(|v| v.to_str().ok()));
+            match forwarded {
+                Some(s) if s.eq_ignore_ascii_case("https") => "https",
+                Some(_) => "http",
+                None => {
+                    if req.headers().get("X-Forwarded-Ssl")
+                        .and_then(|v| v.to_str().ok())
+                        == Some("on")
+                    {
+                        "https"
+                    } else {
+                        match req.headers().get("X-Url-Scheme")
+                            .and_then(|v| v.to_str().ok())
+                        {
+                            Some(s) if s.eq_ignore_ascii_case("https") => "https",
+                            Some(_) => "http",
+                            None => "http",
+                        }
+                    }
                 }
-                if req
-                    .headers()
-                    .get("X-Forwarded-Ssl")
-                    .and_then(|v| v.to_str().ok())
-                    == Some("on")
-                {
-                    return "https".to_string();
-                }
-                if let Some(scheme) = req.headers().get("X-Url-Scheme") {
-                    scheme.to_str().unwrap().to_string()
-                } else {
-                    "http".to_string()
-                }
-            })()
+            }
         };
+
+        let method = req.method().clone();
+
         // ref https://github.com/open-telemetry/semantic-conventions/blob/main/docs/http/http-metrics.md#metric-httpserveractive_requests
         // http.request.method and url.scheme is required
         self.state.metric.req_active.add(
             1,
             &[
-                KeyValue::new("http.request.method", req.method().as_str().to_string()),
-                KeyValue::new("url.scheme", url_scheme.clone()),
+                KeyValue::new(HTTP_REQUEST_METHOD, method.to_string()),
+                KeyValue::new(URL_SCHEME, url_scheme),
             ],
         );
+
         let start = Instant::now();
-        let method = req.method().clone().to_string();
-        let path = if let Some(matched_path) = req.extensions().get::<MatchedPath>() {
-            matched_path.as_str().to_owned()
+        let path: Arc<str> = if let Some(matched_path) = req.extensions().get::<MatchedPath>() {
+            Arc::from(matched_path.as_str())
         } else {
-            "".to_owned()
+            Arc::from("")
         };
 
-        let host = req
-            .headers()
-            .get(http::header::HOST)
-            .and_then(|h| h.to_str().ok())
-            .unwrap_or("unknown")
-            .to_string();
+        let host: Arc<str> = Arc::from(
+            req.headers()
+                .get(http::header::HOST)
+                .and_then(|h| h.to_str().ok())
+                .unwrap_or("unknown")
+        );
 
         let req_body_size = compute_request_body_size(&req);
-
-        // for scheme, see github.com/labstack/echo/v4@v4.11.1/context.go
-        // we can not use req.uri().scheme() since for non-absolute uri, it is always None
 
         ResponseFuture {
             inner: self.service.call(req),
@@ -387,7 +406,8 @@ where
 fn compute_request_body_size<T>(req: &Request<T>) -> usize {
     req.headers()
         .get(http::header::CONTENT_LENGTH)
-        .map(|v| v.to_str().unwrap().parse::<usize>().unwrap_or(0))
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.parse::<usize>().ok())
         .unwrap_or(0)
 }
 
@@ -399,17 +419,23 @@ where
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.project();
-        let response = ready!(this.inner.poll(cx))?;
+        let result = ready!(this.inner.poll(cx));
 
+        // Always decrement active requests, regardless of success or error
         this.state.metric.req_active.add(
             -1,
             &[
-                KeyValue::new("http.request.method", this.method.clone()),
-                KeyValue::new("url.scheme", this.url_scheme.clone()),
+                KeyValue::new(HTTP_REQUEST_METHOD, this.method.to_string()),
+                KeyValue::new(URL_SCHEME, *this.url_scheme),
             ],
         );
 
-        if (this.state.skipper.skip)(this.path.as_str()) {
+        let response = match result {
+            Ok(response) => response,
+            Err(err) => return Poll::Ready(Err(err)),
+        };
+
+        if (this.state.skipper.skip)(this.path.as_ref()) {
             return Poll::Ready(Ok(response));
         }
 
@@ -419,16 +445,16 @@ where
         let res_body_size = response.body().size_hint().upper().unwrap_or(0);
 
         let labels = [
-            KeyValue::new("http.request.method", this.method.clone()),
-            KeyValue::new("http.route", this.path.clone()),
-            KeyValue::new("http.response.status_code", status),
+            KeyValue::new(HTTP_REQUEST_METHOD, this.method.to_string()),
+            KeyValue::new(HTTP_ROUTE, this.path.to_string()),
+            KeyValue::new(HTTP_RESPONSE_STATUS_CODE, status),
             // server.address: Name of the local HTTP server that received the request.
             // Determined by using the first of the following that applies
             //
             // 1. The primary server name of the matched virtual host. MUST only include host identifier.
             // 2. Host identifier of the request target if it's sent in absolute-form.
             // 3. Host identifier of the Host header
-            KeyValue::new("server.address", this.host.clone()),
+            KeyValue::new(SERVER_ADDRESS, this.host.to_string()),
         ];
         this.state.metric.req_body_size.record(*this.req_body_size, &labels);
 
