@@ -26,5 +26,5 @@ http-body = "1.0"
 [dev-dependencies]
 opentelemetry_sdk = { version = "0.31.0", features = ["rt-tokio"] }
 tokio = { version = "1.50", features = ["macros"] }
-axum-test = "20.0.0"
+axum-test = "21.0.0"
 opentelemetry-otlp = { version = "0.31.1", features = ["tokio"] }
