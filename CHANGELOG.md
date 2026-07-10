@@ -1,4 +1,3 @@
- WARN  git_cliff_core::changelog > 19 commit(s) were skipped due to parse error(s) (run with `-vv` for details)
 # Changelog
 
 All notable changes to this project will be documented in this file.
