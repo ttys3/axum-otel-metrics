@@ -8,6 +8,8 @@ homepage = "https://ttys3.dev/"
 repository = "https://github.com/ttys3/axum-otel-metrics/"
 documentation = "https://docs.rs/axum-otel-metrics"
 readme = "README.md"
+keywords = ["axum", "opentelemetry", "metrics", "middleware", "otlp"]
+categories = ["web-programming::http-server", "development-tools::profiling"]
 exclude = [".github/*", "examples/*", "tests/*"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
