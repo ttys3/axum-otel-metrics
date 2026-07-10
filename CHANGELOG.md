@@ -2,6 +2,32 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.14.0] - 2026-07-10
+
+### 🐛 Bug Fixes
+
+- Prevent `http.server.active_requests` from leaking when requests are cancelled: the gauge is now decremented via a `PinnedDrop` guard on client disconnect, timeout-layer cancellation, graceful shutdown and handler panics (edab65f)
+- [**breaking**] Align metric labels with the OTel HTTP semantic conventions: add the required `url.scheme` attribute to all three histograms, record `http.response.status_code` as int instead of string, normalize unknown request methods to `_OTHER`, add the `{request}` unit to `http.server.active_requests`, and drop the outdated leading `0.0` duration bucket (edab65f)
+- Fix the `axum-metrics-demo` example build (mixed otel 0.31/0.32 stacks) and replace `std::thread::sleep` with `tokio::time::sleep` so handlers no longer block tokio workers (0a0d2b4)
+
+### 🚜 Refactor
+
+- Slim the dependency tree from 81 to 29 crates: drop unused `http`, `futures-util` and `opentelemetry_sdk` dependencies, disable default features of `axum`, `opentelemetry` and `tower` (1f97573)
+
+### ⚡ Performance
+
+- Cut per-request heap allocations from ~8 to 2: static `&'static str` method labels, `Arc<str>` route/host attribute values passed to `KeyValue` without re-allocation, and `MetricState` shared via `Arc` instead of cloned per request (edab65f)
+
+### ⚙️ Miscellaneous Tasks
+
+- Add `keywords` and `categories` to Cargo.toml for crates.io discoverability (591c2c9)
+
+### Chore
+
+- *(deps)* [**breaking**] Bump the opentelemetry group to 0.32; opentelemetry types are part of the public API, so downstream users must upgrade their otel stack to 0.32 as well (49477dc)
+- *(deps)* Update axum-test requirement from 20.0.0 to 21.0.0 (2d33b9f)
+- *(deps)* Update tokio to version 1.52 in dev-dependencies (911fda3)
+
 ## [0.13.0] - 2026-04-03
 
 ### 🐛 Bug Fixes
