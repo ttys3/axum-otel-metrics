@@ -45,12 +45,11 @@
 
 use axum::http::Response;
 use axum::{extract::MatchedPath, http, http::Request};
-use std::env;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::Poll::Ready;
-use std::task::{Context, Poll};
+use std::task::{ready, Context, Poll};
 use std::time::Instant;
 
 use opentelemetry::global;
@@ -65,9 +64,8 @@ use opentelemetry_semantic_conventions::metric::{
 
 use tower::{Layer, Service};
 
-use futures_util::ready;
-use http_body::Body as httpBody;
-use pin_project_lite::pin_project; // for `Body::size_hint`
+use http_body::Body as httpBody; // for `Body::size_hint`
+use pin_project_lite::pin_project;
 
 /// OpenTelemetry metric instruments used by the middleware.
 #[derive(Clone)]
@@ -98,23 +96,21 @@ pub struct MetricState {
 /// Tower [`Service`] wrapper that records OpenTelemetry HTTP server metrics.
 #[derive(Clone)]
 pub struct HttpMetrics<S> {
-    pub(crate) state: MetricState,
+    pub(crate) state: Arc<MetricState>,
     service: S,
 }
 
 /// Tower [`Layer`] that wraps services with [`HttpMetrics`] for recording HTTP server metrics.
 #[derive(Clone)]
 pub struct HttpMetricsLayer {
-    pub(crate) state: MetricState,
+    pub(crate) state: Arc<MetricState>,
 }
 
-// TODO support custom buckets
-// allocation not allowed in statics: static HTTP_REQ_DURATION_HISTOGRAM_BUCKETS: Vec<f64> = vec![0, 0.005, 0.01, 0.025, 0.05, 0.075, 0.1, 0.25, 0.5, 0.75, 1, 2.5, 5, 7.5, 10];
 // as https://github.com/open-telemetry/semantic-conventions/blob/main/docs/http/http-metrics.md#metric-httpserverrequestduration spec
-// This metric SHOULD be specified with ExplicitBucketBoundaries of [ 0, 0.005, 0.01, 0.025, 0.05, 0.075, 0.1, 0.25, 0.5, 0.75, 1, 2.5, 5, 7.5, 10 ].
+// This metric SHOULD be specified with ExplicitBucketBoundaries of [ 0.005, 0.01, 0.025, 0.05, 0.075, 0.1, 0.25, 0.5, 0.75, 1, 2.5, 5, 7.5, 10 ].
 // the unit of the buckets is second
 const HTTP_REQ_DURATION_HISTOGRAM_BUCKETS: &[f64] = &[
-    0.0, 0.005, 0.01, 0.025, 0.05, 0.075, 0.1, 0.25, 0.5, 0.75, 1.0, 2.5, 5.0, 7.5, 10.0,
+    0.005, 0.01, 0.025, 0.05, 0.075, 0.1, 0.25, 0.5, 0.75, 1.0, 2.5, 5.0, 7.5, 10.0,
 ];
 
 const KB: f64 = 1024.0;
@@ -271,6 +267,7 @@ impl HttpMetricsLayerBuilder {
         // no u64_up_down_counter because up_down_counter maybe < 0 since it allow negative values
         let req_active = meter
             .i64_up_down_counter(HTTP_SERVER_ACTIVE_REQUESTS)
+            .with_unit("{request}")
             .with_description("Number of active HTTP server requests.")
             .build();
 
@@ -285,7 +282,29 @@ impl HttpMetricsLayerBuilder {
             is_tls: self.is_tls,
         };
 
-        HttpMetricsLayer { state: meter_state }
+        HttpMetricsLayer {
+            state: Arc::new(meter_state),
+        }
+    }
+}
+
+/// Map the request method to a low-cardinality `&'static str` label.
+///
+/// Per the OTel spec, methods not in the well-known set MUST be reported as `_OTHER`
+/// so clients cannot inflate the `http.request.method` label cardinality.
+#[inline]
+fn method_label(method: &http::Method) -> &'static str {
+    match *method {
+        http::Method::GET => "GET",
+        http::Method::POST => "POST",
+        http::Method::PUT => "PUT",
+        http::Method::DELETE => "DELETE",
+        http::Method::HEAD => "HEAD",
+        http::Method::OPTIONS => "OPTIONS",
+        http::Method::CONNECT => "CONNECT",
+        http::Method::PATCH => "PATCH",
+        http::Method::TRACE => "TRACE",
+        _ => "_OTHER",
     }
 }
 
@@ -306,12 +325,32 @@ pin_project! {
         #[pin]
         inner: F,
         start: Instant,
-        state: MetricState,
+        state: Arc<MetricState>,
         path: Arc<str>,
-        method: http::Method,
+        method: &'static str,
         url_scheme: &'static str,
         host: Arc<str>,
         req_body_size: u64,
+        completed: bool,
+    }
+
+    impl<F> PinnedDrop for ResponseFuture<F> {
+        fn drop(this: Pin<&mut Self>) {
+            let this = this.project();
+            // The inner future was dropped before completing (client disconnect,
+            // timeout layer, graceful shutdown, panic unwinding). The regular
+            // decrement in `poll` never ran, so do it here to keep
+            // `http.server.active_requests` from drifting upwards forever.
+            if !*this.completed {
+                this.state.metric.req_active.add(
+                    -1,
+                    &[
+                        KeyValue::new(HTTP_REQUEST_METHOD, *this.method),
+                        KeyValue::new(URL_SCHEME, *this.url_scheme),
+                    ],
+                );
+            }
+        }
     }
 }
 
@@ -356,17 +395,7 @@ where
             }
         };
 
-        let method = req.method().clone();
-
-        // ref https://github.com/open-telemetry/semantic-conventions/blob/main/docs/http/http-metrics.md#metric-httpserveractive_requests
-        // http.request.method and url.scheme is required
-        self.state.metric.req_active.add(
-            1,
-            &[
-                KeyValue::new(HTTP_REQUEST_METHOD, method.to_string()),
-                KeyValue::new(URL_SCHEME, url_scheme),
-            ],
-        );
+        let method = method_label(req.method());
 
         let start = Instant::now();
         let path: Arc<str> = if let Some(matched_path) = req.extensions().get::<MatchedPath>() {
@@ -384,8 +413,23 @@ where
 
         let req_body_size = compute_request_body_size(&req);
 
+        let inner = self.service.call(req);
+
+        // ref https://github.com/open-telemetry/semantic-conventions/blob/main/docs/http/http-metrics.md#metric-httpserveractive_requests
+        // http.request.method and url.scheme is required
+        //
+        // Incremented only after the inner `call` succeeded, so a panic there cannot
+        // leak a `+1`; every other exit path is balanced by `poll` or `PinnedDrop`.
+        self.state.metric.req_active.add(
+            1,
+            &[
+                KeyValue::new(HTTP_REQUEST_METHOD, method),
+                KeyValue::new(URL_SCHEME, url_scheme),
+            ],
+        );
+
         ResponseFuture {
-            inner: self.service.call(req),
+            inner,
             start,
             method,
             path,
@@ -393,6 +437,7 @@ where
             req_body_size: req_body_size as u64,
             state: self.state.clone(),
             url_scheme,
+            completed: false,
         }
     }
 }
@@ -419,10 +464,12 @@ where
         this.state.metric.req_active.add(
             -1,
             &[
-                KeyValue::new(HTTP_REQUEST_METHOD, this.method.to_string()),
+                KeyValue::new(HTTP_REQUEST_METHOD, *this.method),
                 KeyValue::new(URL_SCHEME, *this.url_scheme),
             ],
         );
+        // From here on the cancellation guard in `PinnedDrop` must stay silent.
+        *this.completed = true;
 
         let response = match result {
             Ok(response) => response,
@@ -434,13 +481,13 @@ where
         }
 
         let latency = this.start.elapsed().as_secs_f64();
-        let status = response.status().as_u16().to_string();
+        let status = response.status().as_u16() as i64;
 
         let res_body_size = response.body().size_hint().upper().unwrap_or(0);
 
         let labels = [
-            KeyValue::new(HTTP_REQUEST_METHOD, this.method.to_string()),
-            KeyValue::new(HTTP_ROUTE, this.path.to_string()),
+            KeyValue::new(HTTP_REQUEST_METHOD, *this.method),
+            KeyValue::new(HTTP_ROUTE, this.path.clone()),
             KeyValue::new(HTTP_RESPONSE_STATUS_CODE, status),
             // server.address: Name of the local HTTP server that received the request.
             // Determined by using the first of the following that applies
@@ -448,7 +495,8 @@ where
             // 1. The primary server name of the matched virtual host. MUST only include host identifier.
             // 2. Host identifier of the request target if it's sent in absolute-form.
             // 3. Host identifier of the Host header
-            KeyValue::new(SERVER_ADDRESS, this.host.to_string()),
+            KeyValue::new(SERVER_ADDRESS, this.host.clone()),
+            KeyValue::new(URL_SCHEME, *this.url_scheme),
         ];
         this.state.metric.req_body_size.record(*this.req_body_size, &labels);
 
@@ -611,5 +659,105 @@ mod tests {
         // In test environment, OTLP exporter may fail to flush without real endpoint
         let _ = provider.force_flush();
         let _ = provider.shutdown();
+    }
+
+    fn create_in_memory_provider() -> (opentelemetry_sdk::metrics::InMemoryMetricExporter, SdkMeterProvider) {
+        let exporter = opentelemetry_sdk::metrics::InMemoryMetricExporter::default();
+        let reader = PeriodicReader::builder(exporter.clone()).build();
+        let provider = SdkMeterProvider::builder().with_reader(reader).build();
+        (exporter, provider)
+    }
+
+    #[tokio::test]
+    async fn test_active_requests_not_leaked_on_cancel() {
+        use opentelemetry_sdk::metrics::data::{AggregatedMetrics, MetricData};
+
+        let (exporter, provider) = create_in_memory_provider();
+
+        let layer = HttpMetricsLayerBuilder::new().with_provider(provider.clone()).build();
+
+        let mut svc = tower::Layer::layer(
+            &layer,
+            tower::service_fn(|_req: axum::http::Request<axum::body::Body>| async {
+                std::future::pending::<Result<axum::http::Response<axum::body::Body>, std::convert::Infallible>>().await
+            }),
+        );
+
+        let req = axum::http::Request::builder()
+            .method("GET")
+            .uri("/pending")
+            .body(axum::body::Body::empty())
+            .unwrap();
+
+        // Drop the in-flight future before it completes, simulating a client
+        // disconnect or a timeout layer cancelling the request.
+        let fut = tower::Service::call(&mut svc, req);
+        drop(fut);
+
+        provider.force_flush().unwrap();
+
+        let metrics = exporter.get_finished_metrics().unwrap();
+        let mut found = false;
+        for rm in &metrics {
+            for sm in rm.scope_metrics() {
+                for m in sm.metrics() {
+                    if m.name() == "http.server.active_requests" {
+                        if let AggregatedMetrics::I64(MetricData::Sum(sum)) = m.data() {
+                            for dp in sum.data_points() {
+                                found = true;
+                                assert_eq!(
+                                    dp.value(),
+                                    0,
+                                    "active_requests must return to 0 when the request future is dropped"
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        assert!(found, "http.server.active_requests data points not found");
+    }
+
+    #[tokio::test]
+    async fn test_histogram_labels_follow_semconv() {
+        use opentelemetry::Value;
+        use opentelemetry_sdk::metrics::data::{AggregatedMetrics, MetricData};
+
+        let (exporter, provider) = create_in_memory_provider();
+
+        let metrics = HttpMetricsLayerBuilder::new().with_provider(provider.clone()).build();
+
+        let app = Router::<()>::new().route("/test", get(|| async { "ok" })).layer(metrics);
+
+        let server = TestServer::new(app);
+        let response = server.get("/test").await;
+        assert_eq!(response.status_code(), 200);
+
+        provider.force_flush().unwrap();
+
+        let exported = exporter.get_finished_metrics().unwrap();
+        let mut found = false;
+        for rm in &exported {
+            for sm in rm.scope_metrics() {
+                for m in sm.metrics() {
+                    if m.name() == "http.server.request.duration" {
+                        if let AggregatedMetrics::F64(MetricData::Histogram(hist)) = m.data() {
+                            for dp in hist.data_points() {
+                                found = true;
+                                let attrs: Vec<_> = dp.attributes().collect();
+                                let get = |key: &str| attrs.iter().find(|kv| kv.key.as_str() == key).map(|kv| kv.value.clone());
+                                assert_eq!(get("http.request.method"), Some(Value::from("GET")));
+                                assert_eq!(get("http.route"), Some(Value::from("/test")));
+                                assert_eq!(get("url.scheme"), Some(Value::from("http")));
+                                assert_eq!(get("http.response.status_code"), Some(Value::I64(200)));
+                                assert!(get("server.address").is_some());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        assert!(found, "http.server.request.duration data points not found");
     }
 }
