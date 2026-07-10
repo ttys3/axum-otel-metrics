@@ -101,35 +101,35 @@ async fn set_header<B>(mut response: Response<B>) -> Response<B> {
 }
 
 async fn handler(state: State<SharedState>, path: MatchedPath) -> Html<String> {
-    let mut rng = rand::rng();
+    // ThreadRng is not Send, so grab it per use instead of holding it across awaits
 
     // Default size covers all buckets (5-500 bytes)
-    let n_bytes = rng.random_range(1..=500);
+    let n_bytes = rand::rng().random_range(1..=500);
     let mut dummy = ".".repeat(n_bytes);
 
     let delay_ms: u64;
     match path.as_str() {
         "/hello" => {
             // Small responses (1-20 bytes) covering first two buckets
-            let n_bytes = rng.random_range(1..=20);
+            let n_bytes = rand::rng().random_range(1..=20);
             dummy = ".".repeat(n_bytes);
             // Quick responses (0-10ms) covering first three duration buckets
-            delay_ms = rng.random_range(0..=10);
-            std::thread::sleep(time::Duration::from_millis(delay_ms))
+            delay_ms = rand::rng().random_range(0..=10);
+            tokio::time::sleep(time::Duration::from_millis(delay_ms)).await
         }
         "/world" => {
             // Medium responses (20-100 bytes) covering middle buckets
-            let n_bytes = rng.random_range(20..=100);
+            let n_bytes = rand::rng().random_range(20..=100);
             dummy = ".".repeat(n_bytes);
             // Medium latency (10-50ms) covering middle duration buckets
-            delay_ms = rng.random_range(10..=50);
-            std::thread::sleep(time::Duration::from_millis(delay_ms))
+            delay_ms = rand::rng().random_range(10..=50);
+            tokio::time::sleep(time::Duration::from_millis(delay_ms)).await
         }
         _ => {
             // Larger responses and higher latency for default route
             // covering all buckets including the highest ones
-            delay_ms = rng.random_range(50..=100);
-            std::thread::sleep(time::Duration::from_millis(delay_ms));
+            delay_ms = rand::rng().random_range(50..=100);
+            tokio::time::sleep(time::Duration::from_millis(delay_ms)).await;
         }
     }
 
