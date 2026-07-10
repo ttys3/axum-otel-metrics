@@ -9,7 +9,7 @@
 //! use axum::{response::Html, routing::get, Router};
 //! use opentelemetry_sdk::metrics::{PeriodicReader, SdkMeterProvider, Temporality};
 //! use opentelemetry::global;
-//! 
+//!
 //! let exporter = opentelemetry_otlp::MetricExporter::builder()
 //!     .with_http()
 //!     .with_temporality(Temporality::default())
@@ -233,9 +233,7 @@ impl HttpMetricsLayerBuilder {
 
     /// Build the [`HttpMetricsLayer`] with the configured settings.
     pub fn build(self) -> HttpMetricsLayer {
-        let provider = self.provider.unwrap_or_else(|| {
-            global::meter_provider()
-        });
+        let provider = self.provider.unwrap_or_else(|| global::meter_provider());
 
         let meter = provider.meter_with_scope(
             opentelemetry::InstrumentationScope::builder(env!("CARGO_PKG_NAME"))
@@ -336,23 +334,19 @@ where
         let url_scheme: &'static str = if self.state.is_tls {
             "https"
         } else {
-            let forwarded = req.headers().get("X-Forwarded-Proto")
+            let forwarded = req
+                .headers()
+                .get("X-Forwarded-Proto")
                 .and_then(|v| v.to_str().ok())
-                .or_else(|| req.headers().get("X-Forwarded-Protocol")
-                    .and_then(|v| v.to_str().ok()));
+                .or_else(|| req.headers().get("X-Forwarded-Protocol").and_then(|v| v.to_str().ok()));
             match forwarded {
                 Some(s) if s.eq_ignore_ascii_case("https") => "https",
                 Some(_) => "http",
                 None => {
-                    if req.headers().get("X-Forwarded-Ssl")
-                        .and_then(|v| v.to_str().ok())
-                        == Some("on")
-                    {
+                    if req.headers().get("X-Forwarded-Ssl").and_then(|v| v.to_str().ok()) == Some("on") {
                         "https"
                     } else {
-                        match req.headers().get("X-Url-Scheme")
-                            .and_then(|v| v.to_str().ok())
-                        {
+                        match req.headers().get("X-Url-Scheme").and_then(|v| v.to_str().ok()) {
                             Some(s) if s.eq_ignore_ascii_case("https") => "https",
                             Some(_) => "http",
                             None => "http",
@@ -385,7 +379,7 @@ where
             req.headers()
                 .get(http::header::HOST)
                 .and_then(|h| h.to_str().ok())
-                .unwrap_or("unknown")
+                .unwrap_or("unknown"),
         );
 
         let req_body_size = compute_request_body_size(&req);
@@ -487,9 +481,7 @@ mod tests {
             .with_interval(std::time::Duration::from_secs(30))
             .build();
 
-        SdkMeterProvider::builder()
-            .with_reader(reader)
-            .build()
+        SdkMeterProvider::builder().with_reader(reader).build()
     }
 
     #[tokio::test]
@@ -509,7 +501,7 @@ mod tests {
 
         counter.add(100, &[KeyValue::new("key", "value")]);
         recorder.record(100, &[KeyValue::new("key", "value")]);
-        
+
         // In test environment, OTLP exporter may fail to flush without real endpoint
         let _ = provider.force_flush();
         let _ = provider.shutdown();
@@ -563,9 +555,7 @@ mod tests {
             .with_provider(provider.clone())
             .build();
 
-        let app = Router::<()>::new()
-            .route("/test", get(|| async { "test" }))
-            .layer(metrics);
+        let app = Router::<()>::new().route("/test", get(|| async { "test" })).layer(metrics);
 
         // Create test server
         let server = TestServer::new(app);
@@ -583,13 +573,9 @@ mod tests {
     async fn test_default_buckets() {
         let provider = create_test_provider();
 
-        let metrics = HttpMetricsLayerBuilder::new()
-            .with_provider(provider.clone())
-            .build();
+        let metrics = HttpMetricsLayerBuilder::new().with_provider(provider.clone()).build();
 
-        let app = Router::<()>::new()
-            .route("/test", get(|| async { "test" }))
-            .layer(metrics);
+        let app = Router::<()>::new().route("/test", get(|| async { "test" })).layer(metrics);
 
         // Create test server
         let server = TestServer::new(app);
@@ -607,9 +593,7 @@ mod tests {
     async fn test_metrics_recording() {
         let provider = create_test_provider();
 
-        let metrics = HttpMetricsLayerBuilder::new()
-            .with_provider(provider.clone())
-            .build();
+        let metrics = HttpMetricsLayerBuilder::new().with_provider(provider.clone()).build();
 
         let app = Router::<()>::new()
             .route("/test", get(|| async { "test response" }))
