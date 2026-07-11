@@ -24,7 +24,8 @@
 //!     .with_reader(reader)
 //!     .build();
 //!
-//!  // TODO: ensure defer run `provider.shutdown()?;`
+//! // Force flush and shutdown the provider when the server terminates:
+//! // provider.shutdown()?;
 //!
 //! global::set_meter_provider(provider.clone());
 //!

@@ -58,7 +58,6 @@ async fn main() {
         .with_reader(reader)
         .with_resource(resource)
         .build();
-    // TODO: ensure defer run `provider.shutdown()?;`
 
     global::set_meter_provider(provider.clone());
 
@@ -92,7 +91,42 @@ async fn main() {
     let addr = "127.0.0.1:3000";
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
     println!("listening on http://{}", listener.local_addr().unwrap());
-    axum::serve(listener, app).await.unwrap();
+    
+    axum::serve(listener, app)
+        .with_graceful_shutdown(shutdown_signal())
+        .await
+        .unwrap();
+
+    // Ensure all remaining metrics are flushed to the exporter before exiting
+    if let Err(err) = provider.shutdown() {
+        eprintln!("Error shutting down MeterProvider: {:?}", err);
+    }
+}
+
+async fn shutdown_signal() {
+    let ctrl_c = async {
+        tokio::signal::ctrl_c()
+            .await
+            .expect("failed to install Ctrl+C handler");
+    };
+
+    #[cfg(unix)]
+    let terminate = async {
+        tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+            .expect("failed to install signal handler")
+            .recv()
+            .await;
+    };
+
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
+
+    tokio::select! {
+        _ = ctrl_c => {},
+        _ = terminate => {},
+    }
+
+    println!("signal received, starting graceful shutdown");
 }
 
 async fn set_header<B>(mut response: Response<B>) -> Response<B> {

@@ -106,7 +106,7 @@ dependencies = [
 
 [[package]]
 name = "axum-otel-metrics"
-version = "0.14.0"
+version = "0.14.1"
 dependencies = [
  "axum",
  "http-body",
