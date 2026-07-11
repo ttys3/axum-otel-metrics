@@ -25,6 +25,10 @@ follows [Semantic Conventions for HTTP Metrics](https://github.com/open-telemetr
 > and https://github.com/ttys3/axum-otel-metrics/issues/176
 
 
+## Best Practices
+
+For a detailed guide on configuration, avoiding memory leaks (cardinality limits), optimizing performance, and ensuring graceful shutdown, please refer to our [OpenTelemetry Metrics Best Practices](docs/metrics-best-practices.md) guide.
+
 ## Usage
 
 Uses the [OTLP Exporter](https://opentelemetry.io/docs/specs/otel/metrics/sdk_exporters/otlp/) to send metrics to OpenTelemetry collector.
