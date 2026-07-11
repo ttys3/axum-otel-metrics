@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.14.1] - 2026-07-12
+
+### 🐛 Bug Fixes
+
+- *(deps)* Bump rand to 0.9.3 in axum-metrics-demo example (e1df2f2)
+
 ## [0.14.0] - 2026-07-10
 
 ### 🐛 Bug Fixes
