@@ -106,13 +106,13 @@ The following metrics are exported following OpenTelemetry semantic conventions:
 - The HTTP response sizes in bytes
 - Labels: `http.request.method`, `http.route`, `http.response.status_code`, `server.address`
 
-## OpenTelemetry Rust Instrumentation Status and Releases
+## OpenTelemetry Rust Status and Releases
 
-https://opentelemetry.io/docs/instrumentation/rust/#status-and-releases
+https://opentelemetry.io/docs/languages/rust/#status-and-releases
 
 | Traces | Metrics | Logs |
 |--------|---------|------|
-| [Beta](https://github.com/open-telemetry/oteps/blob/main/text/0232-maturity-of-otel.md#beta) | Beta | Beta |
+| [Beta](https://github.com/open-telemetry/opentelemetry-specification/blob/main/oteps/0232-maturity-of-otel.md#beta) | [Beta](https://github.com/open-telemetry/opentelemetry-specification/blob/main/oteps/0232-maturity-of-otel.md#beta) | [Beta](https://github.com/open-telemetry/opentelemetry-specification/blob/main/oteps/0232-maturity-of-otel.md#beta) |
 
 ## OpenTelemetry Metrics Exporter
 
